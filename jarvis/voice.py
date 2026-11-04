@@ -85,12 +85,13 @@ class VoiceInput:
         self.gate = WakeGate()
         self.messages = deque(maxlen=5)
 
-    def next_command(self):
+    def next_command(self, stop_requested=None):
         import sounddevice as sd
         import vosk
         audio = queue.Queue(maxsize=32)
         errors = queue.Queue(maxsize=4)
         recognizer = vosk.KaldiRecognizer(self.model, self.sample_rate)
+        stop_requested = stop_requested or (lambda: False)
 
         def callback(data, frames, timing, status):
             if status:
@@ -107,8 +108,10 @@ class VoiceInput:
         with sd.RawInputStream(samplerate=self.sample_rate, blocksize=max(1024, self.sample_rate // 5),
                                device=self.device, dtype="int16", channels=1, callback=callback):
             while True:
+                if stop_requested():
+                    return None
                 try:
-                    chunk = audio.get(timeout=2)
+                    chunk = audio.get(timeout=0.25)
                 except queue.Empty:
                     if not errors.empty():
                         raise RuntimeError("Ошибка микрофона: " + errors.get())

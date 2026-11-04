@@ -1,5 +1,30 @@
 # Validation
 
+## Interactive-user autostart update
+
+2026-11-04: registered and started the owned `Jarvis-HomeAssistant` Task Scheduler
+task for the current account, Interactive/Limited, 10-second logon delay,
+`pythonw.exe -m jarvis.background`, IgnoreNew, no execution time limit and three
+failure restarts at one-minute intervals. Existing trading-bot tasks were only
+inspected; their registrations and disabled states were not changed.
+
+- Four additional Python tests pass: process-level singleton exclusion, recovery
+  after a crashed owner, named-event shutdown with handle cleanup, and UTF-8
+  partial-line logging. Combined Python suite: 26 tests.
+- Live scheduled start reached the microphone-listening log entry without a
+  console window. Graceful stop and restart returned the task to a running state.
+  A duplicate foreground voice launch was rejected without opening a second mic.
+- The logon trigger/settings were inspected; an actual Windows logoff/logon was
+  not forced during this session. Failure restart settings are registered; the
+  live assistant was not deliberately crashed to test Task Scheduler recovery.
+- A real OpenRouter request was attempted after a key appeared in `.env`.
+  OpenRouter returned HTTP 401. The current key is read but is not accepted;
+  actual model inference still requires working credentials. Local commands
+  continue through the fallback parser. No key values are printed or committed.
+
+Run all Python tests with `python -m unittest discover -s tests -p test_*.py` from
+the installed project environment. Native code is unchanged by this update.
+
 ## Stage 2: home assistant 0.2.0
 
 Validated on 2026-11-04, Windows x64, Python 3.13.15, MSVC 19.44 / SDK 10.0.26100.0.

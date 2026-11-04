@@ -1,4 +1,5 @@
 import argparse
+from contextlib import ExitStack
 import importlib.metadata
 import json
 import sys
@@ -12,6 +13,7 @@ from .services import LocalServices
 from .setup import configure, ensure_native_config
 from .speech import Speaker
 from .tools import ToolRegistry
+from .runtime import AlreadyRunning, RuntimeOwner, is_running
 
 
 def display(turn):
@@ -65,13 +67,17 @@ def main():
             speaker.speak(arguments.speak)
             return 0
         config = ensure_native_config(settings)
-        with KernelClient(settings.executable, config) as kernel:
+        with ExitStack() as resources:
+            runtime = None
+            if not arguments.doctor and arguments.once is None and not arguments.text:
+                runtime = resources.enter_context(RuntimeOwner())
+            kernel = resources.enter_context(KernelClient(settings.executable, config))
             ready = kernel.call("ping")["result"]
             if arguments.doctor:
                 packages = {}
                 for package in ("vosk", "sounddevice", "edge-tts", "jsonschema"):
                     packages[package] = importlib.metadata.version(package)
-                print(json.dumps({"native": ready, "openrouter_key_present": bool(settings.api_key),
+                print(json.dumps({"native": ready, "voice_running": is_running(), "openrouter_key_present": bool(settings.api_key),
                                   "model": settings.model, "tts": settings.tts, "voice": settings.voice,
                                   "vosk_model_installed": (settings.model_path / "am/final.mdl").is_file(),
                                   "location_mode": "coordinates" if settings.latitude is not None else "city" if settings.city else "Windows then approximate IP",
@@ -103,16 +109,22 @@ def main():
                 from .voice import VoiceInput
                 voice = VoiceInput(settings)
                 print("Голосовой режим: скажите «Джарвис, состояние машины». Выход: «Джарвис, выход» или Ctrl+C.", flush=True)
-                while True:
+                while not runtime.stopped():
                     print("[Микрофон] Слушаю обращение «Джарвис»…", flush=True)
-                    text = voice.next_command()
+                    text = voice.next_command(stop_requested=runtime.stopped)
+                    if text is None:
+                        break
                     if text.casefold() in {"выход", "завершить работу", "до свидания"}:
                         speaker.speak("До связи.")
                         break
                     print("Ты: " + (text or "Джарвис"), flush=True)
                     turn = assistant.respond(text)
                     display(turn)
-                    speaker.speak(turn.text)
+                    if not runtime.stopped():
+                        speaker.speak(turn.text)
+        return 0
+    except AlreadyRunning as exc:
+        print(str(exc))
         return 0
     except (KeyboardInterrupt, EOFError):
         print("\nДжарвис остановлен.")
