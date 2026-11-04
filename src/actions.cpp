@@ -131,7 +131,16 @@ Json Actions::invoke(const std::string& method,const Json& params) {
         return {{"windows",items},{"count",items.size()},{"total_visible",total}};
     }
     if (method=="get_audio") { keys(params,{}); return Audio().state(); }
+    if (method=="list_apps") {
+        keys(params,{}); Json items=Json::array();
+        for (const auto& entry:apps_) {
+            std::error_code ec;
+            items.push_back({{"app_id",entry.first},{"available",std::filesystem::is_regular_file(entry.second.path,ec)}});
+        }
+        return {{"applications",items}};
+    }
     if (!enabled_) throw Failure("actions_disabled","Start the kernel with enable_actions=true to execute registered actions");
+    if (method=="open_url") return open_web_url(params);
     if (method=="launch_app") {
         keys(params,{"app_id"}); const auto id=string_value(params,"app_id");
         const auto it=apps_.find(id); if (it==apps_.end()) throw Failure("app_not_registered","Unknown application ID: "+id);

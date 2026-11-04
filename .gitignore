@@ -10,3 +10,7 @@ __pycache__/
 /local-config.json
 /snapshots/
 /test-results/
+/.venv/
+/models/
+/runtime/
+/assistant.local.json

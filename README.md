@@ -1,17 +1,139 @@
 # Jarvis Core
 
-Native Windows C++ kernel for a personal Jarvis assistant. Stage 1: local system
-metrics, desktop actions, structured JSON, and Python integration.
+Домашний голосовой помощник для Windows: C++-ядро, Python-контроллер,
+OpenRouter с вызовом инструментов, локальное распознавание русской речи и TTS.
+Версия 0.2.0. Разработка этого инструмента ведётся отдельно от ML-менторства.
 
 The implementation adapts the `system_doctor` probes and follows the command
 separation reviewed in `evo-wnd`. Source revision and individual file hashes are
 recorded in [docs/PROVENANCE.md](docs/PROVENANCE.md).
 
+## Быстрый запуск
+
+На текущем компьютере окружение, C++-сборка и русская модель уже установлены.
+Откройте `.env` в папке проекта и заполните `OPENROUTER_API_KEY`, затем запустите:
+
+```powershell
+cd C:\Users\tima\jarvis-core
+.\run.cmd
+```
+
+Можно открыть `run.cmd` двойным щелчком. Ключ считывается при запуске, поэтому
+после изменения `.env` перезапустите помощника. Секреты из `.env`, виртуальное
+окружение, модели и персональная конфигурация исключены из Git.
+
+```dotenv
+OPENROUTER_API_KEY=ваш_ключ
+OPENROUTER_MODEL=openai/gpt-4.1-mini
+JARVIS_CITY=
+JARVIS_TTS=edge
+JARVIS_VOICE=ru-RU-DmitryNeural
+```
+
+Модель можно заменить на доступную в OpenRouter модель с поддержкой tools.
+Без ключа работают простые локальные команды; свободный диалог требует ключа.
+При ошибке OpenRouter выполненное действие не запускается повторно.
+
+Примеры обращения:
+
+- «Джарвис, состояние машины».
+- «Джарвис, открой ютуб» / «Джарвис, открой сайт example.com».
+- «Джарвис, открой телеграмм».
+- «Джарвис, какая погода?».
+- «Джарвис, найди кафе» / «Джарвис, куда сходить?».
+- «Джарвис, выход».
+
+Обращение можно произнести отдельно: «Джарвис», дождаться «Слушаю» и сказать
+команду. Окно ожидания — 8 секунд. Во время выполнения команды и озвучивания
+микрофон закрыт: версия 0.2 не поддерживает перебивание ответа.
+
+## Установка и диагностика
+
+Для новой установки: Windows x64, Python 3.10+, Visual Studio 2022 с C++ и Windows
+SDK, CMake, Git. Проверено на Python 3.13 x64; точные версии зависимостей сохранены
+в `requirements.lock.txt`. Запустите `setup.ps1` (или команду ниже), заполните
+созданный `.env`. Модель Vosk загружается с официального сайта (~45 MB).
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+.\run.cmd -Text
+.\run.cmd -Command "джарвис, состояние машины" -Mute
+.\.venv\Scripts\python.exe -m jarvis --doctor
+.\.venv\Scripts\python.exe -m jarvis --list-mics
+.\.venv\Scripts\python.exe -m jarvis --configure
+```
+
+`--configure` предлагает скрытый ввод ключа и сохраняет локальный `.env`.
+`JARVIS_MICROPHONE` позволяет выбрать номер микрофона из `--list-mics`.
+Если ExecutionPolicy блокирует запуск `.ps1`, используйте `run.cmd`.
+
+## Голос, местоположение и данные
+
+Распознавание Vosk работает локально. В OpenRouter отправляются текст запроса,
+короткая история диалога и результаты нужных инструментов; аудиозаписи не
+сохраняются. Голос по умолчанию — русский мужской `ru-RU-DmitryNeural` через
+edge-tts: текст ответа отправляется сервису Microsoft. При его недоступности
+включается установленный русский голос Windows; для постоянного локального
+озвучивания задайте `JARVIS_TTS=windows`.
+
+Местоположение выбирается в порядке: заданные `JARVIS_LATITUDE` и
+`JARVIS_LONGITUDE` → заданный `JARVIS_CITY` → разрешённая геолокация Windows →
+приблизительный город по IP. IP может относиться к VPN или провайдеру. Если город
+определён неверно, задайте `JARVIS_CITY`; время/страна/язык системы не используются
+как доказательство вашего местонахождения. Для поиска рядом с домом можно задать
+обе координаты вместо центра города.
+
+Погода берётся из Open-Meteo, места — из OpenStreetMap через Overpass. Часы работы
+и доступность заведений не проверяются. При недоступности серверов списка мест
+помощник возвращает ссылку на поиск по карте и сообщает об ограничении.
+Источники: [Open-Meteo](https://open-meteo.com/),
+[© OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
+
+Telegram определяется по обычным каталогам, реестру или уже запущенному процессу.
+Для нестандартной установки задайте `JARVIS_TELEGRAM_PATH`. Локальная конфигурация
+разрешённых приложений находится в `%LOCALAPPDATA%\Jarvis\kernel.json`.
+Telegram только открывается: сообщения и контакты не читаются и не отправляются.
+
+## Архитектура и инструменты
+
+```mermaid
+flowchart LR
+    Mic[Микрофон] --> ASR[Локальный Vosk]
+    ASR --> Python[Python-контроллер]
+    Python <--> OR[OpenRouter: текст и tool calls]
+    Python <--> IPC[Постоянный канал JSON Lines]
+    IPC <--> Native[C++ / Windows API]
+    Python <--> Web[Погода / геолокация / места]
+    Python --> TTS[Edge TTS или Windows SAPI]
+    TTS --> Audio[Голосовой ответ]
+```
+
+Python запускает один дочерний процесс C++ и общается через stdin/stdout UTF-8.
+Каждый запрос имеет уникальный `id`, проверяется версия протокола, ожидание
+ограничено тайм-аутом. Чтение stdout/stderr идёт отдельными потоками; команды
+сериализуются. При обрыве/тайм-ауте канал закрывается, команда не повторяется.
+Процесс завершается вместе с контроллером; открытые приложения продолжают работу.
+
+Инструменты модели: `get_system_status`, `open_website`, `list_applications`,
+`open_application`, `get_location`, `get_weather`, `find_places`.
+Их аргументы проверяются по JSON Schema. Модель не получает инструмент shell;
+приложения запускаются только из локального реестра, сайты — только HTTP(S).
+Не более 6 запросов к модели и 12 вызовов инструментов за один запрос пользователя.
+
+Чтобы добавить возможность, зарегистрируйте `Tool` в `jarvis/tools.py` со схемой,
+описанием и обработчиком. Для новой системной операции добавьте команду в C++.
+Контроллер OpenRouter и голосовой цикл при этом менять не требуется.
+
+Проверки и практические ограничения: [docs/VALIDATION.md](docs/VALIDATION.md).
+Пользовательский черновик `agent.py` оставлен отдельно; запускаемый контроллер —
+пакет `jarvis`, точка входа `python -m jarvis`.
+
 ## Build and run
 
 Windows x64, Visual Studio 2022 with Desktop development with C++, Windows SDK,
-CMake 3.24+, Git. Python 3.10+ is used for integration tests/examples. No Python
-packages are required. Initial CMake configuration downloads nlohmann/json at a
+CMake 3.24+, Git. Python 3.10+ is used for native integration tests/examples, which
+do not require extra Python packages. The voice assistant uses requirements.lock.txt.
+Initial CMake configuration downloads nlohmann/json at a
 pinned commit (v3.11.3).
 
 ```powershell
@@ -36,6 +158,9 @@ calls through a stable C ABI.
 | `list_processes` | Bounded top processes by CPU and working set | No |
 | `list_windows` | Visible top-level windows, PID, title, executable | No |
 | `get_audio` | Default playback endpoint volume/mute | No |
+| `list_apps` | Registered application IDs and availability | No |
+| `get_location` | Windows coordinates, accuracy, sample age, or explicit error | No |
+| `open_url` | Send an HTTP(S) URL to the default browser | Yes |
 | `launch_app` | Launch a registered executable; return PID | Yes |
 | `stop_app` | Terminate a child launched by this kernel instance | Yes |
 | `focus_window` | Request activation; report whether it succeeded | Yes |
@@ -99,13 +224,11 @@ is immutable after creation. Requests on one instance are serialized. Destroy an
 instance only after all its calls finish. Invalid configuration returns a null
 handle. The ctypes example contains the required argument/return declarations.
 
-## Next stage
+## Reference documentation
 
-The Python controller will expose enabled capabilities to an agent, pass tool
-requests to the native kernel, collect results, and send selected context through
-OpenRouter. Speech recognition and TTS follow that integration. This repository
-does not yet call a model, listen to the microphone or synthesize speech.
-
-Development proceeds through working features; Python syntax is explained as it
-appears in the integration work. Stage 1 implementation is provided, not assigned
-as introductory homework.
+- [OpenRouter tool calling](https://openrouter.ai/docs/guides/features/tool-calling)
+- [Vosk Russian models](https://alphacephei.com/vosk/models)
+- [edge-tts](https://github.com/rany2/edge-tts)
+- [Open-Meteo weather API](https://open-meteo.com/en/docs)
+- [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API)
+- [Windows Geolocator](https://learn.microsoft.com/en-us/uwp/api/windows.devices.geolocation.geolocator)

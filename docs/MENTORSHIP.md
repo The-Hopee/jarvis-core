@@ -13,6 +13,12 @@ boundary. The user's independent Python/ML proficiency has not yet been assessed
 from submitted code. Resume wording must distinguish architecture/requirements
 work, assisted implementation and the user's later independent contributions.
 
-Learning proceeds through project features; syntax questions are addressed as
-they arise. The next implementation stage is the Python agent/collector loop
-using the native capability catalog, followed by OpenRouter and speech.
+2026-11-04: the user separated Jarvis from the mentoring curriculum. Jarvis is a
+home tool implemented on request. ML study will start with a shared foundation;
+the user is interested in NLP, computer vision, speech/audio and recommender
+systems and will choose one or more specializations later. Do not require Jarvis
+implementation as homework or treat assisted code as independent ML experience.
+
+Stage 2 implements the Python controller, persistent IPC, OpenRouter tool calling,
+Russian speech input/output, browser/Telegram commands, weather and places tools.
+Live OpenRouter inference awaits the API key the user will add to local .env.

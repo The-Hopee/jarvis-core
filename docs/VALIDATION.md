@@ -1,4 +1,61 @@
-# Stage 1 validation
+# Validation
+
+## Stage 2: home assistant 0.2.0
+
+Validated on 2026-11-04, Windows x64, Python 3.13.15, MSVC 19.44 / SDK 10.0.26100.0.
+
+- Release EXE/DLL rebuilt successfully. Native contract suite now contains seven
+  scenarios, all passing, including rejection of non-web URLs without opening them.
+- 22 Python tests pass. They cover tool schemas, OpenRouter request/result
+  correlation, bounded tool iterations, duplicate action suppression, error
+  fallback without replay, literal .env parsing, URL handling, wake-word expiry,
+  explicit location precision, weather caching and map-search outage fallback.
+- Real IPC tests use one persistent native process from six caller threads,
+  verify distinct request IDs, recover after a command error, and close correctly
+  after a child crash or an actual timeout. Only each test's own child is killed.
+- A local HTTP fixture using the OpenRouter chat-completion schema requests a
+  tool, reaches real C++ CPU/RAM measurements, receives the correlated tool result,
+  and returns a final assistant message. This is a protocol integration test,
+  not a request to an actual language model.
+- Edge synthesized a nonempty MP3 with `ru-RU-DmitryNeural`. Windows MCI playback
+  completed for a short phrase and a spoken real machine-status response.
+- Windows SAPI generated 16 kHz mono WAVs for four Russian command phrases;
+  Vosk recognized their wake words and routed all four to the intended tools.
+  One recognized inflection, «состоянии машины», was added to the fallback parser.
+- The default microphone opened and captured 100 ms without overflow. This
+  verifies driver access, not recognition accuracy for the user's actual voice.
+- YouTube and Telegram were requested through Python -> persistent IPC -> C++.
+  Windows accepted browser launch and created the registered Telegram process.
+  Page loading and application UI readiness are not asserted.
+- Live IP location and Open-Meteo weather calls succeeded. Windows did not
+  provide coordinates; IP resolved to Stockholm, which may be a VPN/proxy exit.
+  No current city is assumed from the user's timezone or account language.
+- Public Overpass servers were unavailable from this environment. `find_places`
+  reports `lookup_status: unavailable` and provides a Yandex Maps search URL;
+  it does not invent place names. The real OSM parsing path is covered by fixtures.
+
+Actual OpenRouter inference is **not yet verified**: the user will add their key
+to local `.env` later. No paid LLM requests or microphone recordings were stored.
+Speech is half-duplex; the microphone closes during tool execution and playback.
+Background startup, barge-in, streaming replies and arbitrary desktop automation
+are not part of version 0.2.
+
+Reproduce the automated checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_assistant.py -v
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Opt-in checks (live services / local speech synthesis):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\voice_smoke.py
+.\.venv\Scripts\python.exe scripts\service_smoke.py
+.\.venv\Scripts\python.exe -m jarvis --doctor
+```
+
+## Stage 1: original native-kernel validation
 
 Validated locally on Windows x64, 2026-11-04 (Europe/Moscow).
 
@@ -29,5 +86,5 @@ activation can be denied by Windows; the kernel reports that outcome. App
 creation is tested with the dedicated fixture; readiness of arbitrary third-party
 application UIs is outside this stage's verification.
 
-OpenRouter, speech recognition and TTS are later stages and are not claimed as
-implemented or validated here.
+The checks above describe the original stage 1 snapshot. See stage 2 for the
+current Python/OpenRouter/speech implementation and its validation limits.

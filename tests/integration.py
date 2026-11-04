@@ -48,6 +48,18 @@ class ContractTests(unittest.TestCase):
             self.assertFalse(capabilities['actions_enabled'])
             self.assertTrue(all(t['enabled']==t['read_only'] for t in capabilities['tools']))
             self.assertEqual(s.call('launch_app',app_id='notepad')['error']['code'],'actions_disabled')
+            self.assertEqual(s.call('open_url',url='https://example.com')['error']['code'],'actions_disabled')
+            self.assertTrue(s.call('list_apps')['ok'])
+            self.assertEqual(s.call('get_location',timeout_seconds=100)['error']['code'],'invalid_argument')
+
+    def test_browser_rejects_non_web_inputs_without_opening(self):
+        with Session('--enable-actions') as s:
+            for url in ['file:///C:/Windows/notepad.exe','cmd.exe','javascript:alert(1)',
+                        'https://user:password@example.com/','https://example.com/\ncmd.exe',
+                        'https://example.com/"bad','https://example.com/\\bad','https://']:
+                response=s.call('open_url',url=url)
+                self.assertFalse(response['ok'],url)
+                self.assertEqual(response['error']['code'],'invalid_argument',response)
 
     def test_oversized_line_recovers(self):
         with Session() as s:

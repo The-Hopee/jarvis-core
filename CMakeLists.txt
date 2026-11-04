@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(jarvis_core VERSION 0.1.0 LANGUAGES CXX)
+project(jarvis_core VERSION 0.2.0 LANGUAGES CXX)
 if(NOT WIN32)
     message(FATAL_ERROR "Jarvis Core requires Windows and the Windows SDK")
 endif()
@@ -13,7 +13,7 @@ FetchContent_Declare(nlohmann_json
 FetchContent_MakeAvailable(nlohmann_json)
 
 add_library(jarvis_runtime STATIC
-    src/kernel.cpp src/actions.cpp src/metrics.cpp src/windows_util.cpp
+    src/kernel.cpp src/actions.cpp src/desktop.cpp src/metrics.cpp src/windows_util.cpp
     src/probes/probe_utils.cpp src/probes/cpu_probe.cpp
     src/probes/memory_probe.cpp src/probes/process_probe.cpp
     src/probes/disk_probe.cpp src/probes/network_probe.cpp
@@ -21,7 +21,7 @@ add_library(jarvis_runtime STATIC
     src/probes/system_probe.cpp src/slowdown_rules.cpp)
 target_include_directories(jarvis_runtime PUBLIC include PRIVATE src)
 target_link_libraries(jarvis_runtime PUBLIC nlohmann_json::nlohmann_json
-    PRIVATE psapi advapi32 iphlpapi ws2_32 user32 ole32 uuid)
+    PRIVATE psapi advapi32 iphlpapi ws2_32 user32 ole32 uuid shell32 winhttp windowsapp)
 target_compile_definitions(jarvis_runtime PUBLIC UNICODE _UNICODE NOMINMAX _WIN32_WINNT=0x0A00)
 if(MSVC)
     target_compile_options(jarvis_runtime PRIVATE /W4 /permissive- /utf-8)

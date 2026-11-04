@@ -20,6 +20,8 @@ std::string utc_now();
 void keys(const Json& object, std::initializer_list<const char*> allowed);
 int integer(const Json& object, const char* name, int fallback, int low, int high);
 std::string string_value(const Json& object, const char* name);
+Json open_web_url(const Json& params);
+Json windows_location(const Json& params);
 
 class Handle {
     HANDLE value_ = nullptr;
