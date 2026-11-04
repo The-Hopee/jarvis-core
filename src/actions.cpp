@@ -141,6 +141,7 @@ Json Actions::invoke(const std::string& method,const Json& params) {
     }
     if (!enabled_) throw Failure("actions_disabled","Start the kernel with enable_actions=true to execute registered actions");
     if (method=="open_url") return open_web_url(params);
+    if (method=="open_telegram_dialog") return jarvis::open_telegram_dialog(params);
     if (method=="launch_app") {
         keys(params,{"app_id"}); const auto id=string_value(params,"app_id");
         const auto it=apps_.find(id); if (it==apps_.end()) throw Failure("app_not_registered","Unknown application ID: "+id);

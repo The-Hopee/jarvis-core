@@ -14,13 +14,8 @@ class KernelError(RuntimeError):
         self.code = code
 
 
-class KernelClient:
-    def __init__(self, executable: Path, config: Path | None = None, timeout: float = 15):
-        if not executable.is_file():
-            raise KernelError("kernel_missing", f"Не найдено C++-ядро: {executable}. Запустите setup.ps1.")
-        command = [str(executable), "--stdio", "--enable-actions"]
-        if config:
-            command += ["--config", str(config)]
+class JsonProcessClient:
+    def __init__(self, command: list[str], timeout: float = 15, cwd=None):
         self.timeout = timeout
         self._lock = threading.Lock()
         self._queue = queue.Queue(maxsize=4)
@@ -28,7 +23,7 @@ class KernelClient:
         self._closed = False
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), cwd=cwd)
         self._reader = threading.Thread(target=self._read, daemon=True)
         self._errors = threading.Thread(target=self._read_errors, daemon=True)
         self._reader.start()
@@ -109,3 +104,13 @@ class KernelClient:
 
     def __exit__(self, *_):
         self.close()
+
+
+class KernelClient(JsonProcessClient):
+    def __init__(self, executable: Path, config: Path | None = None, timeout: float = 15):
+        if not executable.is_file():
+            raise KernelError("kernel_missing", f"Не найдено C++-ядро: {executable}. Запустите setup.ps1.")
+        command = [str(executable), "--stdio", "--enable-actions"]
+        if config:
+            command += ["--config", str(config)]
+        super().__init__(command, timeout=timeout)

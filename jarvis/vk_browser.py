@@ -1,0 +1,49 @@
+"""Browser transport and one-time local login for VK's web messenger."""
+import sys
+
+from .config import ROOT, USER_DIR
+from .ipc import JsonProcessClient
+
+PROFILE = USER_DIR / 'vk-browser'
+
+
+class VKBrowser:
+    def __init__(self):
+        self.process = None
+
+    def call(self, method, **params):
+        if self.process is None:
+            command = [sys.executable.replace('pythonw.exe', 'python.exe'), '-m', 'jarvis.vk_worker', '--profile', str(PROFILE)]
+            self.process = JsonProcessClient(command, timeout=50, cwd=ROOT)
+        return self.process.call(method, params)['result']
+
+    def open(self, recipient):
+        return self.call('open_dialog', recipient=recipient)
+
+    def read(self, recipient, limit=30):
+        return self.call('read_dialog', recipient=recipient, limit=limit)
+
+    def send(self, recipient, text, operation_id):
+        return self.call('send_message', recipient=recipient, text=text, operation_id=operation_id)
+
+    def close(self):
+        if self.process:
+            self.process.close()
+            self.process = None
+
+
+def login():
+    from playwright.sync_api import sync_playwright
+    PROFILE.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as playwright:
+        context = playwright.chromium.launch_persistent_context(str(PROFILE), headless=False, locale='ru-RU')
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            page.goto('https://vk.com/im', wait_until='domcontentloaded', timeout=30000)
+            print('Войдите в VK в открывшемся окне. Пароль вводите только на странице VK.')
+            input('Когда список диалогов станет доступен, нажмите Enter здесь: ')
+            from .vk_worker import VKPage
+            VKPage(page).ensure_messenger()
+            print('Браузерный профиль сохранён локально. Сообщения при подключении не отправлялись.')
+        finally:
+            context.close()

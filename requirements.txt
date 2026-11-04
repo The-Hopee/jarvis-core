@@ -2,3 +2,6 @@ vosk==0.3.45
 sounddevice>=0.5,<0.6
 edge-tts>=7,<8
 jsonschema>=4.23,<5
+telethon>=1.45,<2
+playwright>=1.50,<2
+pymorphy3>=2,<3

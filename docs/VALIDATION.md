@@ -1,5 +1,39 @@
 # Validation
 
+## Version 0.3 update
+
+2026-11-04: 39 Python tests and eight native contract scenarios pass.
+
+- Real YouTube HTML search returned video IDs/titles for the requested artist.
+  The exact reported utterance was executed through the CLI and opened a concrete
+  watch URL, with the selected title spoken by the response formatter.
+- Parser tests cover classic/new YouTube result formats, ad exclusion and refusal
+  to invent a video when a challenge page replaces results.
+- Real Chromium exercised a local VK messenger fixture: recipient selection,
+  outgoing/incoming context, send button, appearance of an outgoing message, and
+  suppression of a duplicate send without leaving another draft.
+- Message tests cover ambiguous identities, inflected Russian names, direct-user
+  send intent, explicit draft-only requests, operation receipts, uncertain
+  delivery reporting and style extraction from outgoing messages only.
+- Two coding workers ran concurrently in real separate Git worktrees on a test
+  repository, produced real commits, merged into an integration branch and
+  passed a check importing both modules. The original checkout/HEAD stayed
+  unchanged. Model responses in this test were fixtures, not live LLM inference.
+- Native Telegram link tests reject arbitrary schemas, embedded query arguments,
+  invalid identifiers and disabled actions before launching anything.
+- Official Silero v5 Russian model synthesized nonempty WAVs for Aidar and
+  Eugene, including mixed Russian/Latin/numeric text. Local speech playback
+  completed. User selected Eugene; samples are kept outside Git.
+- Telegram account credentials/session and VK login are deferred by the user.
+  Real private chats were not read and no real messages were sent during tests.
+  A public VK navigation reached its login page; authenticated selectors await
+  validation after the user signs in.
+- Live OpenRouter request still returns HTTP 401. Contextual replies and coding
+  jobs have implemented protocol paths but are not claimed as live-model tested.
+
+Optional voice runtime: CPU torch 2.15.0+cpu, NumPy 2.5.4, SciPy 1.18.1; local
+weights are downloaded from the official Silero URL and are not committed.
+
 ## Interactive-user autostart update
 
 2026-11-04: registered and started the owned `Jarvis-HomeAssistant` Task Scheduler

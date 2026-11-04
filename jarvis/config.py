@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 USER_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Jarvis"
@@ -32,13 +33,22 @@ class Settings:
     root: Path = ROOT
     api_key: str = field(default="", repr=False)
     model: str = "openai/gpt-4.1-mini"
+    master_model: str = ""
+    worker_model: str = ""
+    review_model: str = ""
     tts: str = "edge"
     voice: str = "ru-RU-DmitryNeural"
+    voice_preset: str = "deep"
+    tts_rate: str = "-8%"
+    tts_pitch: str = "-18Hz"
+    local_speaker: str = "aidar"
     city: str = ""
     latitude: float | None = None
     longitude: float | None = None
     microphone: int | str | None = None
     telegram_path: str = ""
+    telegram_api_id: int | None = None
+    telegram_api_hash: str = field(default="", repr=False)
     model_path: Path = ROOT / "models" / "vosk-model-small-ru-0.22"
 
     @property
@@ -59,11 +69,31 @@ class Settings:
         if microphone and microphone.isdecimal():
             microphone = int(microphone)
         tts = values.get("JARVIS_TTS", "edge").strip()
-        if tts not in {"edge", "windows", "off"}:
-            raise ValueError("JARVIS_TTS: edge, windows или off")
+        if tts not in {"silero", "edge", "windows", "off"}:
+            raise ValueError("JARVIS_TTS: silero, edge, windows или off")
+        local_speaker = values.get("JARVIS_LOCAL_SPEAKER", "aidar").strip()
+        if local_speaker not in {"aidar", "eugene"}:
+            raise ValueError("JARVIS_LOCAL_SPEAKER: aidar или eugene")
+        preset = values.get("JARVIS_VOICE_PRESET", "deep").strip()
+        presets = {"normal": ("+0%", "-5Hz"), "deep": ("-8%", "-18Hz"), "cinematic": ("-12%", "-24Hz")}
+        if preset not in presets:
+            raise ValueError("JARVIS_VOICE_PRESET: normal, deep или cinematic")
+        rate = values.get("JARVIS_TTS_RATE", "").strip() or presets[preset][0]
+        pitch = values.get("JARVIS_TTS_PITCH", "").strip() or presets[preset][1]
+        if not re.fullmatch(r"[+-]\d{1,2}%", rate) or not -30 <= int(rate[:-1]) <= 30:
+            raise ValueError("JARVIS_TTS_RATE: от -30% до +30%")
+        if not re.fullmatch(r"[+-]\d{1,2}Hz", pitch) or not -50 <= int(pitch[:-2]) <= 50:
+            raise ValueError("JARVIS_TTS_PITCH: от -50Hz до +50Hz")
         return cls(root=root, api_key=values.get("OPENROUTER_API_KEY", "").strip(),
                    model=values.get("OPENROUTER_MODEL", "").strip() or "openai/gpt-4.1-mini",
+                   master_model=values.get("JARVIS_MASTER_MODEL", "").strip(),
+                   worker_model=values.get("JARVIS_WORKER_MODEL", "").strip(),
+                   review_model=values.get("JARVIS_REVIEW_MODEL", "").strip(),
                    tts=tts, voice=values.get("JARVIS_VOICE", "ru-RU-DmitryNeural"),
+                   voice_preset=preset, tts_rate=rate, tts_pitch=pitch,
+                   local_speaker=local_speaker,
                    city=values.get("JARVIS_CITY", "").strip(), latitude=lat, longitude=lon,
                    microphone=microphone, telegram_path=values.get("JARVIS_TELEGRAM_PATH", "").strip(),
+                   telegram_api_id=int(values["TELEGRAM_API_ID"]) if values.get("TELEGRAM_API_ID", "").strip() else None,
+                   telegram_api_hash=values.get("TELEGRAM_API_HASH", "").strip(),
                    model_path=Path(values.get("JARVIS_VOSK_MODEL", str(root / "models/vosk-model-small-ru-0.22"))))

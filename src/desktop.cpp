@@ -5,6 +5,7 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Devices.Geolocation.h>
 #include <chrono>
+#include <algorithm>
 
 namespace jarvis {
 Json open_web_url(const Json& params) {
@@ -53,5 +54,32 @@ Json windows_location(const Json& params) {
     } catch (const winrt::hresult_error& e) {
         throw Failure("location_unavailable","Windows location is disabled, not permitted, or unavailable. Check Windows location privacy settings.",static_cast<unsigned long>(e.code().value));
     }
+}
+
+Json open_telegram_dialog(const Json& params) {
+    keys(params,{"username","phone"});
+    if (params.contains("username")==params.contains("phone"))
+        throw Failure("invalid_argument","Specify exactly one Telegram username or contact phone");
+    std::string uri="tg://resolve?";
+    if (params.contains("username")) {
+        const auto value=string_value(params,"username");
+        if (value.size()<4||value.size()>32||value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")!=std::string::npos)
+            throw Failure("invalid_argument","Invalid Telegram username");
+        uri+="domain="+value;
+    } else {
+        const auto value=string_value(params,"phone");
+        if (value.size()<5||value.size()>15||value.find_first_not_of("0123456789")!=std::string::npos)
+            throw Failure("invalid_argument","Invalid Telegram contact phone");
+        uri+="phone="+value;
+    }
+    const auto link=wide(uri);
+    const HRESULT initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED|COINIT_DISABLE_OLE1DDE);
+    struct Cleanup { bool initialized; ~Cleanup(){if(initialized) CoUninitialize();} } cleanup{SUCCEEDED(initialized)};
+    if (FAILED(initialized)&&initialized!=RPC_E_CHANGED_MODE)
+        throw Failure("telegram_open_failed","Cannot initialize Windows shell",static_cast<unsigned long>(initialized));
+    SHELLEXECUTEINFOW info{}; info.cbSize=sizeof(info); info.fMask=SEE_MASK_FLAG_NO_UI|SEE_MASK_NOASYNC;
+    info.lpVerb=L"open"; info.lpFile=link.c_str(); info.nShow=SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info)) throw Failure("telegram_open_failed","Telegram protocol handler is unavailable",GetLastError());
+    return {{"status","shell_accepted"},{"chat_open_verified",false}};
 }
 }

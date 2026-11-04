@@ -31,6 +31,8 @@ Json capabilities(bool enable_actions) {
         object({{"timeout_seconds",{{"type","integer"},{"minimum",1},{"maximum",10}}}}));
     add("open_url","Open an HTTP or HTTPS URL in the default browser",false,
         object({{"url",{{"type","string"},{"minLength",1},{"maxLength",4096}}}},Json::array({"url"})));
+    add("open_telegram_dialog","Open a Telegram chat by a resolved public username or contact phone",false,
+        object({{"username",{{"type","string"},{"maxLength",32}}},{"phone",{{"type","string"},{"maxLength",15}}}}));
     add("launch_app","Launch an application registered by the local configuration",false,
         object({{"app_id",{{"type","string"},{"minLength",1}}}},Json::array({"app_id"})));
     add("stop_app","Terminate only a child launched by this kernel instance",false,
@@ -67,7 +69,7 @@ Json Kernel::execute(const std::string& input) {
         else if (method=="system_snapshot") result=collect_snapshot(params);
         else if (method=="list_processes") { keys(params,{"top_n"}); result=probes::CollectProcessMetrics(integer(params,"top_n",10,1,100)); }
         else if (method=="get_location") result=windows_location(params);
-        else if (method=="list_windows"||method=="get_audio"||method=="list_apps"||method=="open_url"||method=="launch_app"||method=="stop_app"||method=="focus_window"||method=="set_volume"||method=="set_mute")
+        else if (method=="list_windows"||method=="get_audio"||method=="list_apps"||method=="open_url"||method=="open_telegram_dialog"||method=="launch_app"||method=="stop_app"||method=="focus_window"||method=="set_volume"||method=="set_mute")
             result=impl_->actions.invoke(method,params);
         else throw Failure("method_not_found","Unknown method: "+method);
     } catch (const Json::parse_error&) { error={{"code","parse_error"},{"message","Request must contain valid UTF-8 JSON"}}; }

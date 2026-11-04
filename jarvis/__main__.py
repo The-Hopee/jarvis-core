@@ -22,6 +22,12 @@ def display(turn):
         print("[Сервис] " + turn.warning, file=sys.stderr)
     for record in turn.tools:
         output = record["output"]
+        if record["name"] in {"open_youtube_video", "search_youtube"} and output.get("ok"):
+            result = output["result"]
+            if result.get("url"):
+                print("  Видео: " + result["url"])
+            for index, video in enumerate(result.get("videos", []), 1):
+                print(f"  {index}. {video['title']}: {video['url']}")
         if record["name"] == "find_places" and output.get("ok"):
             if output["result"].get("search_url"):
                 print("  Поиск на карте: " + output["result"]["search_url"])
@@ -44,10 +50,30 @@ def main():
     group.add_argument("--download-model", action="store_true", help="скачать локальную русскую ASR-модель (~45 MB)")
     group.add_argument("--configure", action="store_true", help="локально ввести API-ключ и город")
     group.add_argument("--speak", help="проверить озвучивание указанной фразой")
+    group.add_argument("--voice-previews", action="store_true", help="создать три образца голоса: normal, deep, cinematic")
+    group.add_argument("--download-voice", action="store_true", help="установить локальную русскую нейромодель голоса")
+    group.add_argument("--telegram-login", action="store_true", help="локально подключить Telegram API")
+    group.add_argument("--vk-login", action="store_true", help="войти в VK в отдельном браузере Джарвиса")
     parser.add_argument("--mute", action="store_true", help="выводить ответы только текстом")
     arguments = parser.parse_args()
     try:
         settings = Settings.load()
+        if arguments.vk_login:
+            from .vk_browser import login
+            login()
+            return 0
+        if arguments.telegram_login:
+            from .telegram_api import login
+            login(settings)
+            return 0
+        if arguments.download_voice:
+            from .tts_local import download_model
+            print(download_model())
+            return 0
+        if arguments.voice_previews:
+            from .speech import voice_previews
+            print(json.dumps(voice_previews(settings), ensure_ascii=False, indent=2))
+            return 0
         if arguments.configure:
             configure(settings)
             return 0
@@ -79,12 +105,16 @@ def main():
                     packages[package] = importlib.metadata.version(package)
                 print(json.dumps({"native": ready, "voice_running": is_running(), "openrouter_key_present": bool(settings.api_key),
                                   "model": settings.model, "tts": settings.tts, "voice": settings.voice,
+                                  "voice_preset": settings.voice_preset,
+                                  "local_speaker": settings.local_speaker,
+                                  "telegram_api_configured": bool(settings.telegram_api_id and settings.telegram_api_hash),
                                   "vosk_model_installed": (settings.model_path / "am/final.mdl").is_file(),
                                   "location_mode": "coordinates" if settings.latitude is not None else "city" if settings.city else "Windows then approximate IP",
                                   "applications": kernel.call("list_apps")["result"]["applications"], "packages": packages}, ensure_ascii=False, indent=2))
                 return 0
             services = LocalServices(settings, kernel)
             registry = ToolRegistry(kernel, services)
+            resources.callback(registry.close)
             client = OpenRouterClient(settings.api_key, settings.model) if settings.api_key else None
             assistant = Assistant(registry, client)
             if not settings.api_key:

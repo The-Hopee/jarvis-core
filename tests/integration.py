@@ -61,6 +61,17 @@ class ContractTests(unittest.TestCase):
                 self.assertFalse(response['ok'],url)
                 self.assertEqual(response['error']['code'],'invalid_argument',response)
 
+    def test_telegram_deep_links_reject_arbitrary_protocols_and_arguments(self):
+        with Session() as s:
+            self.assertEqual(s.call('open_telegram_dialog',username='example_user')['error']['code'],'actions_disabled')
+        with Session('--enable-actions') as s:
+            for params in [{},{'username':'bad&start=anything'},{'username':'abc?bad'},
+                           {'username':'name','phone':'12345'},{'phone':'+7 999 999'},
+                           {'phone':'12345&text=anything'},{'url':'cmd.exe'}]:
+                response=s.call('open_telegram_dialog',**params)
+                self.assertFalse(response['ok'],params)
+                self.assertEqual(response['error']['code'],'invalid_argument',response)
+
     def test_oversized_line_recovers(self):
         with Session() as s:
             self.assertEqual(s.raw('x'*(1024*1024+1))['error']['code'],'request_too_large')

@@ -2,15 +2,19 @@ from .http import ServiceError, request_json
 
 
 class OpenRouterClient:
-    def __init__(self, api_key: str, model: str, http=request_json):
+    def __init__(self, api_key: str, model: str, http=request_json, max_tokens=600):
         self._api_key, self.model, self.http = api_key, model, http
+        self.max_tokens = max_tokens
 
     def complete(self, messages: list, tools: list, *, allow_tools=True):
         if not self._api_key:
             raise ServiceError("Добавьте OPENROUTER_API_KEY в .env")
         body = {"model": self.model, "messages": messages, "tools": tools,
                 "tool_choice": "auto" if allow_tools else "none", "parallel_tool_calls": False,
-                "max_tokens": 600, "provider": {"require_parameters": True}}
+                "max_tokens": self.max_tokens, "provider": {"require_parameters": True}}
+        if not tools:
+            for key in ("tools", "tool_choice", "parallel_tool_calls"):
+                body.pop(key, None)
         response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,
                              headers={"Authorization": "Bearer " + self._api_key, "X-Title": "Jarvis Home"},
                              timeout=45)
