@@ -1,0 +1,106 @@
+{
+  "source_project": "evo-wnd",
+  "source_head": "94fc440acf2b94c5ddc68887eaed9f3132705a6d",
+  "files": [
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/battery_probe.h",
+      "source_sha256": "c9e0ad716f17666536f34ef75f421c51d0d53ca2832261f63c0388ecb1cf0305",
+      "destination": "src/probes/battery_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/cpu_probe.h",
+      "source_sha256": "e342a2c984e5c7e4252f1e5a452a1bd7e287a2c9ba25e2299b20d168ecec8168",
+      "destination": "src/probes/cpu_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/disk_probe.h",
+      "source_sha256": "8800e7de634ae200b6a3edb040a03e6d7f376c258d5aa349d2f07f7b8a082ed2",
+      "destination": "src/probes/disk_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/memory_probe.h",
+      "source_sha256": "1634f46ffde98ccc43e9fd9ce32fcf69bcf853b62761b5fa8bed8e4e355cc487",
+      "destination": "src/probes/memory_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/network_probe.h",
+      "source_sha256": "96bc9be1bd28b8e0207d529fc244bf92e3e0d76c34c6c54a234ca7554266cfc5",
+      "destination": "src/probes/network_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/probe_utils.h",
+      "source_sha256": "ae947f208f35998cca39c1c12ced0c266a6b6b9d8b3a6ead23982eb28e936ff6",
+      "destination": "src/probes/probe_utils.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/process_probe.h",
+      "source_sha256": "ef09d3aa06f696760025feb2f5a043864f41fa29b48bcf700f6b425e3a931889",
+      "destination": "src/probes/process_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/startup_probe.h",
+      "source_sha256": "b8ac40831d484e89e91bdba7ec20f92181815eeca4d3d397935e938964e92201",
+      "destination": "src/probes/startup_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/system_probe.h",
+      "source_sha256": "5f6e424fe7eea1135f24e6380497f78cb0b7b7afa7b777672c98f0a9e0a230a4",
+      "destination": "src/probes/system_probe.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/battery_probe.cpp",
+      "source_sha256": "78305606eff728fad97f1ceb9eb443fd3a3eadaf877cf90e5cb602bb43c0aa2b",
+      "destination": "src/probes/battery_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/cpu_probe.cpp",
+      "source_sha256": "70501dfdf9546c7822b074ba140e791f4336d5deb5799750b57ea16ba78b9cd4",
+      "destination": "src/probes/cpu_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/disk_probe.cpp",
+      "source_sha256": "502952fc22f20ac40a239486bbef90afbf151ffe134303ebc3651a7fe8c905e9",
+      "destination": "src/probes/disk_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/memory_probe.cpp",
+      "source_sha256": "77a16299c9ce60556a3ff62578604f2104bd32223dcadc25c2588e7dbe8b449c",
+      "destination": "src/probes/memory_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/network_probe.cpp",
+      "source_sha256": "a781939e5415a164bc0286627c69ce6833f1a0e7a7227ba56612954b9e8a018c",
+      "destination": "src/probes/network_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/probe_utils.cpp",
+      "source_sha256": "f62767527c75856676db01b3f26cfba157378667d411aaeb2ecae1113fbb8596",
+      "destination": "src/probes/probe_utils.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/process_probe.cpp",
+      "source_sha256": "11da415f6492f78ef0d29cc8ddf3cc5dfc144fa435165c37a9311c499e2d476d",
+      "destination": "src/probes/process_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/startup_probe.cpp",
+      "source_sha256": "e97fe41291e0e783ea74aad0c1d8b98ba67dfb1f8f87aae592a5496fd1fbe0ab",
+      "destination": "src/probes/startup_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/probes/system_probe.cpp",
+      "source_sha256": "a960a3f145a10d4ce8b33f12553c5d2eeebdd914a4e6fc5f0cc59d60b0b72083",
+      "destination": "src/probes/system_probe.cpp"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/slowdown_rules.h",
+      "source_sha256": "5015472651974c57193d690f664bb95b0aa13e23aa263c0cabff51eecc016e59",
+      "destination": "src/slowdown_rules.h"
+    },
+    {
+      "source_path": "lib/src/modules/system_doctor/engine/slowdown_rules.cpp",
+      "source_sha256": "75a8e90c5421476b4aaf5a1a6c57bf8e3cdee0ec8c415f28098556ceaa61d60e",
+      "destination": "src/slowdown_rules.cpp"
+    }
+  ]
+}

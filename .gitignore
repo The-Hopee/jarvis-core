@@ -1,0 +1,12 @@
+/build*/
+/.vs/
+/.idea/
+__pycache__/
+*.py[cod]
+*.user
+.env
+.env.*
+!.env.example
+/local-config.json
+/snapshots/
+/test-results/

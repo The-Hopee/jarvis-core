@@ -1,0 +1,10 @@
+{
+  "enable_actions": false,
+  "applications": {
+    "my_editor": {
+      "path": "C:\\Program Files\\MyEditor\\editor.exe",
+      "args": [],
+      "hidden": false
+    }
+  }
+}
