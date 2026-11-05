@@ -131,6 +131,11 @@ class VKMusicPage:
         return {k: track[k] for k in ('title', 'artist')}
 
     def now_track(self):
+        top=visible(self.page,['[data-testid="TopAudioPlayer_Title"]'])
+        if top is not None:
+            artist,separator,title=top.inner_text().strip().partition(' — ')
+            if separator and artist and title:
+                return {'id':'text-'+hashlib.sha256((title+'\0'+artist).encode()).hexdigest()[:20],'title':title,'artist':artist}
         selected = [t for t in self.tracks() if t['_playing']]
         if selected:
             return selected[0]
@@ -213,6 +218,15 @@ class VKMusicPage:
     def selected(self, row):
         return row.evaluate("(row, fields) => row.matches(fields.active) || fields.pause.some(s => !!row.querySelector(s))", DOM_FIELDS)
 
+    def matches_player(self,track):
+        # Modern VK removes the selected item from the search list after play.
+        # Validate public player metadata, independently of changing row indexes.
+        top=visible(self.page,['[data-testid="TopAudioPlayer_Title"]'])
+        if top is not None:
+            return key(top.inner_text())==key(track['artist']+' — '+track['title'])
+        try:return self.selected(self.row(track))
+        except ServiceError:return False
+
     def progressing(self, before, after_sequence=None):
         positions = {a['index']: a['time'] for a in before}
         return next((a for a in self.audio() if not a['paused'] and not a['ended'] and a['ready'] >= 2 and
@@ -273,7 +287,7 @@ class VKMusicPage:
         while time.monotonic() < deadline:
             self.page.wait_for_timeout(150)
             playing = self.progressing(before, after_sequence=sequence)
-            if playing and self.selected(self.row(track)):
+            if playing and self.matches_player(track):
                 return self.playback_result(track, index, playing, 'playing')
             before = self.audio()
         return self.playback_result(track, index, None, 'play_requested')
@@ -306,7 +320,7 @@ class VKMusicPage:
         if action == 'resume' and before:
             if not any(not a['paused'] and not a['ended'] for a in before):
                 button = visible(self.page, ['.audio_page_player_play', '.top_audio_player_play',
-                    '[data-testid="player-play"]', '[data-testid="player-toggle"]'])
+                    '[data-testid="player-play"]', '[data-testid="player-toggle"]','[data-testid="TopAudioPlayer_TogglePlayAction"]'])
                 if button is None and self.current and self.current.get('_row') is not None:
                     button = visible(self.row(self.current), PLAY)
                 if button is None:
@@ -326,9 +340,10 @@ class VKMusicPage:
             return {'status': 'play_requested', 'playback_verified': False, 'do_not_retry': True}
         if action in {'next', 'previous'} and self.current:
             sequence = max((a['sequence'] for a in before), default=0)
+            modern='[data-testid="TopAudioPlayer_ForwardAction"]' if action=='next' else '[data-testid="TopAudioPlayer_BackwardAction"]'
             selectors = ['.audio_page_player_next', '.top_audio_player_next', '[data-testid="player-next"]', 'button[aria-label="Следующий трек"]'] if action == 'next' else [
                 '.audio_page_player_prev', '.top_audio_player_prev', '[data-testid="player-previous"]', 'button[aria-label="Предыдущий трек"]']
-            button = visible(self.page, selectors)
+            button = visible(self.page, [modern,*selectors])
             if button is None:
                 current = next((i for i, t in enumerate(self.results) if t['id'] == self.current['id']), None)
                 if current is not None:

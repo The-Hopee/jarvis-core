@@ -82,6 +82,27 @@ class MessagingTests(unittest.TestCase):
 
 
 class VKFixtureTests(unittest.TestCase):
+    def test_modern_saved_messages_survive_reload_and_duplicate_does_not_send(self):
+        from playwright.sync_api import sync_playwright
+        from jarvis.vk_worker import VKPage
+        html='''<html><style>[contenteditable]{display:block;min-width:200px;min-height:30px}</style><body><div data-testid="me_convo_list"><input placeholder="Поиск">
+        <button onclick="document.querySelector('.ConvoHeader__title').textContent='Избранное'"><span class="SearchConvoTab__importantUserName">Избранное</span></button></div>
+        <div class="ConvoHeader__title">Избранное</div><div id="messages"></div>
+        <span role="textbox" contenteditable="true" data-testid="vkme_composer_input" oninput="document.querySelector('button[data-testid]').setAttribute('aria-label','Отправить')"></span>
+        <button data-testid="vkme_composer_send" aria-label="Начать запись голосового сообщения" onclick="const input=document.querySelector('[contenteditable]');const a=JSON.parse(localStorage.getItem('notes')||'[]');a.push(input.innerText);localStorage.setItem('notes',JSON.stringify(a));input.innerText='';render()">Send</button>
+        <script>function render(){document.querySelector('#messages').innerHTML='';for(const t of JSON.parse(localStorage.getItem('notes')||'[]')){const div=document.createElement('div');div.className='ConvoMessageWithoutBubble';const span=document.createElement('span');span.className='MessageText';span.textContent=t;div.append(span);document.querySelector('#messages').append(div)}}render()</script></body></html>'''
+        with tempfile.TemporaryDirectory() as directory,sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=browser.new_page();page.route('https://vk.com/**',lambda route:route.fulfill(body=html,content_type='text/html; charset=utf-8'))
+                page.goto('https://vk.com/im');vk=VKPage(page,MessageLedger(Path(directory)/'ledger.db'))
+                first=vk.send_message('Избранное','diagnostic-note','unique-operation')
+                self.assertEqual(first['status'],'sent');self.assertEqual(first['recipient_id'],'self')
+                duplicate=vk.send_message('Избранное','diagnostic-note','unique-operation')
+                self.assertTrue(duplicate['reused_receipt'])
+                self.assertEqual(page.locator('.MessageText').all_text_contents(),['diagnostic-note'])
+            finally:browser.close()
+
     def test_real_browser_dialog_read_send_and_no_duplicate(self):
         from playwright.sync_api import sync_playwright
         from jarvis.vk_worker import VKPage

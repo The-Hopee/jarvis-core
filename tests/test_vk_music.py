@@ -190,6 +190,15 @@ class BrowserMusicTests(unittest.TestCase):
         self.assertTrue(music.control('pause')['pause_verified'])
         self.assertTrue(music.control('resume')['playback_verified'])
 
+    def test_playing_track_removed_from_results_is_verified_by_current_player(self):
+        self.music.search('Исполнитель')
+        self.page.evaluate('''() => {
+          const top=document.createElement('div');top.dataset.testid='TopAudioPlayer_Title';document.body.append(top);
+          const original=select;window.select=index=>{original(index);top.innerText=songs[index].artist+' — '+songs[index].title;document.querySelector('#tracks').innerHTML='';};
+        }''')
+        self.assertTrue(self.music.play_result(1)['playback_verified'])
+        self.assertTrue(self.music.control('pause')['pause_verified'])
+
     def test_real_detached_audio_search_play_pause_resume_next_and_previous(self):
         found=self.music.search('Исполнитель')
         self.assertEqual([t['title'] for t in found['tracks']],['Альфа','Бета'])

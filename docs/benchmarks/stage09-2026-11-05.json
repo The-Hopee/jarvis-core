@@ -1,0 +1,12 @@
+{
+  "music_results": 2,
+  "playback_verified": true,
+  "pause_verified": true,
+  "playback_muted": true,
+  "saved_messages_opened": true,
+  "self_send_status": "sent",
+  "self_send_persisted_after_reload": true,
+  "duplicate_reused_receipt": true,
+  "telegram_live": "deferred_by_user_my_telegram_org_blocked",
+  "vk_other_recipients_live": "pending_selected_recipient"
+}

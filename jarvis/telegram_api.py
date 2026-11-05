@@ -54,6 +54,9 @@ class TelegramAPI:
     async def resolve(self, client, recipient):
         from telethon import utils, types
         candidates, entities = [], {}
+        if recipient.casefold().strip() in {'избранное','себе','самому себе','saved messages','me'}:
+            entity=await client.get_me()
+            return {'recipient':{'id':str(utils.get_peer_id(entity)),'name':'Избранное','username':entity.username or ''},'candidates':[]},entity
         if recipient.startswith('@') and re.fullmatch(r'@[A-Za-z][A-Za-z0-9_]{3,31}', recipient):
             entity = await client.get_entity(recipient)
             if not isinstance(entity, types.User):
