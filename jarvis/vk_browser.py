@@ -16,8 +16,8 @@ class VKBrowser:
 
     def call(self, method, **params):
         if self.process is None:
-            command = [sys.executable.replace('pythonw.exe', 'python.exe'), '-m', 'jarvis.vk_worker', '--profile', str(PROFILE)]
-            self.process = JsonProcessClient(command, timeout=50, cwd=ROOT)
+            from .child_process import command
+            self.process = JsonProcessClient(command('jarvis.vk_worker','--profile',PROFILE), timeout=50, cwd=ROOT)
         try:
             return self.process.call(method, params)['result']
         except KernelError as exc:

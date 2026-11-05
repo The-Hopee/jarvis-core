@@ -5,7 +5,7 @@ import hashlib
 import os
 import time
 
-from .config import ROOT
+from .config import ROOT,USER_DIR
 
 _kernel = ctypes.WinDLL("kernel32", use_last_error=True)
 _kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
@@ -27,7 +27,7 @@ _kernel.WaitForSingleObject.restype = wintypes.DWORD
 _kernel.CloseHandle.argtypes = [wintypes.HANDLE]
 _kernel.CloseHandle.restype = wintypes.BOOL
 
-DEFAULT_NAME = "Local\\Jarvis.Home." + hashlib.sha256(os.path.normcase(str(ROOT)).encode("utf-8")).hexdigest()[:20]
+DEFAULT_NAME = "Local\\Jarvis.Home." + hashlib.sha256(os.path.normcase(str(USER_DIR)).encode("utf-8")).hexdigest()[:20]
 
 
 class AlreadyRunning(RuntimeError):

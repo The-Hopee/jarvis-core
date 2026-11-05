@@ -1,0 +1,12 @@
+{
+  "model": "openai/gpt-6-sol",
+  "effort": "high",
+  "status": "ready_for_review",
+  "workers": 2,
+  "checks_passed": true,
+  "review_approved": true,
+  "original_unchanged": true,
+  "accounted_usd": 0.0484112,
+  "limit_usd": 1.0,
+  "external_project_modified": false
+}

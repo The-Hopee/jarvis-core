@@ -3,9 +3,11 @@ import os
 import math
 from pathlib import Path
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-USER_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Jarvis"
+USER_DIR = Path(os.environ.get('JARVIS_DATA_DIR') or str(Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Jarvis")).resolve()
+if getattr(sys,'frozen',False):os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH',str(USER_DIR/'browsers'))
 
 
 def read_env(path: Path) -> dict[str, str]:

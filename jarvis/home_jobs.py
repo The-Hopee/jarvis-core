@@ -14,6 +14,7 @@ from .telemetry import TurnTrace
 from .http import ServiceError
 
 STAGES={'queued':'в очереди','starting':'начинаю','model':'готовлю ответ','tool':'выполняю действие',
+        'planning':'строю план','workers':'исполнители пишут код','checks':'проверяю результат','review':'выполняю ревью',
         'resource_wait':'ожидаю общий ресурс','completed':'готова','failed':'ошибка','cancelled':'остановлена',
         'cancel_requested':'останавливается','interrupted':'прервана перезапуском','blocked':'зависимая задача не выполнена'}
 
