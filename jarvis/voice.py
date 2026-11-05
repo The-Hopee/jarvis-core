@@ -98,10 +98,10 @@ class VoiceInput:
         self.settings = settings
         self.cloud_retry_at = 0
 
-    def after_response(self):
+    def after_response(self, seconds=None):
         # The timer starts after model/TTS latency, giving the user the full
         # configured window. No microphone is open while the assistant speaks.
-        self.gate.resume(self.settings.conversation_seconds)
+        self.gate.resume(self.settings.conversation_seconds if seconds is None else seconds)
 
     def sleep(self):
         self.gate.sleep()

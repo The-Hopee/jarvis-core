@@ -9,6 +9,7 @@ from .media import youtube_query
 from .chat_intents import chat_intent
 from .applications import application_id
 from .conversation import Conversation
+from .music_intents import music_intent
 
 SYSTEM_PROMPT = """Ты Джарвис, домашний голосовой помощник пользователя. Отвечай по-русски,
 спокойно и кратко, обычно 1–4 предложения. Лёгкая ирония допустима, выдуманные факты нет.
@@ -33,6 +34,12 @@ VS Code: «Мы работаем над новым проектом?» Не за
 Используй инструменты для состояния ПК, запуска сайта/приложения, погоды и мест.
 Для открытия видео по исполнителю/названию используй open_youtube_video, а не
 open_website со свободным текстом. Назови реально выбранное видео из результата.
+Для треков VK используй search_vk_music/play_vk_music, для номера из предыдущего
+поиска — play_vk_music_result. Не подменяй музыку VK видео с YouTube. Пауза,
+продолжение и переключение музыки VK — control_vk_music. При playback_verified=false
+скажи, что команда передана, но проигрывание не подтверждено; не повторяй запуск.
+Названия и исполнителей бери только из результатов. Страница входа не означает
+запуск песни: если VK требует вход, дай команду --vk-login, не запрашивай пароль в чате.
 Не утверждай, что действие выполнено, пока инструмент не вернул ok=true. shell_accepted
 и process_created означают передачу запроса Windows, а не проверенную загрузку окна/страницы.
 При таком статусе говори естественно «Открываю VS Code/документ», а не «уже открыт».
@@ -65,6 +72,9 @@ def local_intent(text):
     dialog = chat_intent(text)
     if dialog:
         return dialog
+    music = music_intent(text)
+    if music:
+        return music
     video_query = youtube_query(text)
     if video_query:
         return "open_youtube_video", {"query": video_query}
@@ -108,6 +118,20 @@ def describe_tool(name, output):
     if not output.get("ok"):
         return "Не удалось выполнить команду: " + output.get("error", {}).get("message", "неизвестная ошибка")
     result = output["result"]
+    if name == 'search_vk_music':
+        tracks = result.get('tracks', [])
+        return 'Нашёл в VK: ' + '; '.join(f"{n}. {t['artist']} — {t['title']}" for n, t in enumerate(tracks, 1)) + '.' if tracks else 'Подходящих треков VK не нашёл.'
+    if name in {'play_vk_music', 'play_vk_music_result', 'control_vk_music'}:
+        status = result.get('status')
+        if status == 'idle':
+            return 'Проигрыватель VK пока не запущен. Какой трек включить?'
+        if status == 'paused' and (result.get('pause_verified') or name == 'control_vk_music'):
+            return 'Музыка VK на паузе.'
+        track = result.get('track') or {}
+        title = (track.get('artist', '') + ' — ' + track.get('title', '')).strip(' —')
+        if result.get('playback_verified'):
+            return 'В VK играет ' + title + '.' if title else 'Воспроизведение музыки VK продолжается.'
+        return 'Команда проигрывателю VK передана, но воспроизведение не подтверждено. Повторно запускать не буду.'
     if result.get('status') in {'ambiguous', 'not_found'}:
         candidates = result.get('candidates', [])
         return ('Нашёл несколько совпадений: ' + ', '.join(item['name'] for item in candidates) + '. Уточни адресата.') if candidates else 'Нужный собеседник не найден. Уточни имя или username.'

@@ -4,17 +4,19 @@ import time
 
 ORDINALS = {"первое": 1, "первый": 1, "первого": 1, "второе": 2, "второй": 2, "второго": 2,
             "третье": 3, "третий": 3, "третьего": 3, "четвертое": 4, "четвёртое": 4,
-            "четвертый": 4, "четвёртый": 4, "пятое": 5, "пятый": 5}
+            "четвертый": 4, "четвёртый": 4, "пятое": 5, "пятый": 5,
+            "первую": 1, "вторую": 2, "третью": 3, "четвертую": 4, "четвёртую": 4, "пятую": 5}
 
 
 def selection_number(text):
     text = text.casefold().strip(" .!?,")
-    match = re.fullmatch(r"(?:(?:давай|включи|открой|покажи|выбери|номер|тогда)\s+)?([1-5]|" + "|".join(ORDINALS) + r")(?:\s+(?:видео|ролик|вариант))?", text)
+    match = re.fullmatch(r"(?:(?:давай|включи|открой|покажи|выбери|номер|тогда)\s+)?([1-5]|" + "|".join(ORDINALS) + r")(?:\s+(?:видео|ролик|вариант|трек|песню))?", text)
     return (int(match[1]) if match[1].isdigit() else ORDINALS[match[1]]) if match else None
 
 
 class Conversation:
     def __init__(self):
+        self.music_playing = False
         self.clear()
 
     def clear(self):
@@ -33,7 +35,9 @@ class Conversation:
     def followup(self, text):
         self.expire()
         number = selection_number(text)
-        if self.pending:
+        explicit_music = bool(re.search(r'\b(?:трек|песню)\b', text, re.I))
+        explicit_video = bool(re.search(r'\b(?:видео|ролик)\b', text, re.I))
+        if self.pending and not explicit_music and not explicit_video and not re.match(r'включи\b', text, re.I):
             pending, candidate = self.pending, None
             if number and number <= len(pending["candidates"]):
                 candidate = pending["candidates"][number - 1]
@@ -46,6 +50,17 @@ class Conversation:
                 args = {**pending["arguments"], "recipient": str(candidate["id"])}
                 self.pending = None
                 return pending["name"], args, pending["can_send"]
+        if number and explicit_video:
+            return ('open_youtube_result', {'index': number}, False) if self.context.get('youtube_query') else None
+        if number and explicit_music:
+            return ('play_vk_music_result', {'index': number}, False) if self.context.get('vk_music_query') else None
+        if number and self.context.get('last_media') == 'vk_music':
+            return 'play_vk_music_result', {'index': number}, False
+        if self.context.get('last_media') == 'vk_music':
+            from .music_intents import music_control
+            action = music_control(text)
+            if action:
+                return 'control_vk_music', {'action': action}, False
         if number and self.context.get("youtube_query"):
             return "open_youtube_result", {"index": number}, False
         dialog = self.context.get("dialog")
@@ -76,8 +91,21 @@ class Conversation:
             self.context["recipient_name"] = result["recipient"].get("name", "")
             self.pending = None
         if name in {"open_youtube_video", "open_youtube_result", "search_youtube"} or result.get("video_id"):
+            self.pending = None
+            self.context['last_media'] = 'youtube'
             self.context["youtube_query"] = result.get("query", "")
             self.context["youtube_title"] = result.get("title", "")
+        if name in {'search_vk_music', 'play_vk_music', 'play_vk_music_result', 'control_vk_music'}:
+            if result.get('tracks') or result.get('track') or result.get('status') not in {None, 'idle'}:
+                self.pending = None
+                self.context['last_media'] = 'vk_music'
+            if result.get('query'):
+                self.context['vk_music_query'] = result['query']
+            if result.get('track'):
+                self.context['vk_music_track'] = result['track']
+            if name != 'search_vk_music':
+                self.context['vk_music_playing'] = result.get('status') not in {'paused', 'idle'}
+                self.music_playing = self.context['vk_music_playing']
         if name == "open_application" or result.get("app_id"):
             self.context["application"] = result.get("app_id") or arguments.get("app_id")
         if name in {"read_document", "create_document", "fill_document", "open_document"} and result.get("path"):

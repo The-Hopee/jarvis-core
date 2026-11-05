@@ -8,6 +8,7 @@ import time
 
 from .http import ServiceError
 from .messaging import MessageLedger, choose_recipient, normalized, name_key
+from .vk_browser import VKLoginRequired
 
 
 class VKPage:
@@ -28,7 +29,7 @@ class VKPage:
             self.page.goto('https://vk.com/im', wait_until='domcontentloaded', timeout=25000)
         if not re.match(r'https://(?:[^/]+\.)?vk\.(?:com|ru)/(?:im|mail)', self.page.url) or self.first_visible([
             'input[type="password"]', 'input[name="login"]', 'input[name="phone"]']):
-            raise ServiceError('Нужен вход в VK. Выполните python -m jarvis --vk-login')
+            raise VKLoginRequired('Нужен вход в VK. Выполните python -m jarvis --vk-login')
 
     def open_dialog(self, recipient):
         self.ensure_messenger()
@@ -133,6 +134,34 @@ class VKPage:
         return {'status': 'submitted_unverified', 'recipient_id': target['id'], 'do_not_retry': True}
 
 
+class VKSession:
+    """One profile and serialized IPC, separate pages for dialogs and playback."""
+    def __init__(self, context):
+        self.context, self.dialogs, self.music = context, None, None
+
+    def new_page(self):
+        for page in self.context.pages:
+            if page.url == 'about:blank' and not (self.dialogs and page == self.dialogs.page) and not (self.music and page == self.music.page):
+                return page
+        return self.context.new_page()
+
+    def dispatch(self, method, params):
+        if method in {'open_dialog', 'read_dialog', 'send_message'}:
+            if self.dialogs is None or self.dialogs.page.is_closed():
+                self.dialogs = VKPage(self.new_page())
+            return getattr(self.dialogs, method)(**params)
+        if method in {'search_music', 'play_music', 'play_music_result', 'control_music'}:
+            if method == 'control_music' and (self.music is None or self.music.page.is_closed()):
+                return {'status': 'idle', 'playback_verified': False}
+            if self.music is None or self.music.page.is_closed():
+                from .vk_music import VKMusicPage
+                self.music = VKMusicPage(self.new_page())
+            handler = {'search_music': self.music.search, 'play_music': self.music.play,
+                       'play_music_result': self.music.play_result, 'control_music': self.music.control}[method]
+            return handler(**params)
+        raise ServiceError('Неизвестный метод браузера')
+
+
 def main():
     from playwright.sync_api import sync_playwright
     parser = argparse.ArgumentParser()
@@ -144,9 +173,7 @@ def main():
         profile.mkdir(parents=True, exist_ok=True)
         context = playwright.chromium.launch_persistent_context(str(profile), headless=False, locale='ru-RU')
         try:
-            page = context.pages[0] if context.pages else context.new_page()
-            adapter = VKPage(page)
-            methods = {'open_dialog': adapter.open_dialog, 'read_dialog': adapter.read_dialog, 'send_message': adapter.send_message}
+            session = VKSession(context)
             for line in sys.stdin:
                 request_id = None
                 try:
@@ -154,14 +181,11 @@ def main():
                         raise ServiceError('Запрос браузера слишком большой')
                     request = json.loads(line)
                     request_id = request.get('id')
-                    method = methods.get(request.get('method'))
-                    if method is None:
-                        raise ServiceError('Неизвестный метод браузера')
-                    result = method(**request.get('params', {}))
+                    result = session.dispatch(request.get('method'), request.get('params', {}))
                     response = {'protocol_version': 1, 'id': request_id, 'ok': True, 'result': result, 'error': None}
                 except Exception as exc:
                     response = {'protocol_version': 1, 'id': request_id, 'ok': False, 'result': None,
-                                'error': {'code': 'browser_failed', 'message': str(exc)[:700]}}
+                                'error': {'code': getattr(exc, 'code', 'browser_failed'), 'message': str(exc)[:700]}}
                 print(json.dumps(response, ensure_ascii=False), flush=True)
         finally:
             context.close()

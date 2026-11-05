@@ -22,6 +22,9 @@ def display(turn):
         print("[Сервис] " + turn.warning, file=sys.stderr)
     for record in turn.tools:
         output = record["output"]
+        if record['name'] == 'search_vk_music' and output.get('ok'):
+            for index, track in enumerate(output['result'].get('tracks', []), 1):
+                print(f"  VK {index}. {track['artist']} — {track['title']}")
         if record["name"] in {"open_youtube_video", "search_youtube"} and output.get("ok"):
             result = output["result"]
             if result.get("url"):
@@ -164,7 +167,10 @@ def main():
                     display(turn)
                     if not runtime.stopped():
                         speaker.speak(turn.text)
-                        voice.after_response()
+                        # Song lyrics must not become follow-up user commands.
+                        # A deliberate wake word alone still grants one short reply.
+                        playing_music = assistant.conversation.music_playing
+                        voice.after_response((8 if not text else 0) if playing_music else None)
         return 0
     except AlreadyRunning as exc:
         print(str(exc))

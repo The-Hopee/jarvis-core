@@ -1,5 +1,37 @@
 # Validation
 
+## VK music update
+
+2026-11-05: all 76 Python tests pass, including 13 new music/browser cases.
+Native C++ code is unchanged from the already validated 0.4 build.
+
+- VK music search, indexed playback, pause/resume, next/previous and status are
+  exposed through the existing persistent browser IPC. Separate browser pages
+  keep messenger navigation from unloading the player. Long track lists are
+  read in one bounded DOM snapshot rather than per-row IPC loops.
+- Actual headless Chromium plays a silent fixture WAV through a detached Audio
+  object. Tests verify elapsed playback time, native playing-event sequence,
+  selected-row identity, pause/resume, stable indexed results, manual switching,
+  and search while another song continues. Old advancing audio does not falsely
+  confirm a newly selected stalled song, including on another user turn.
+- Further tests reject stale/reordered/empty results, unverified playback claims,
+  repeated toggle/skip actions, private stream/token data in public results,
+  mixing VK track numbers with YouTube video numbers, and using media selection
+  to continue an older pending outbound-message recipient choice.
+- Login-required errors release the owned browser profile and preserve the typed
+  IPC error so --vk-login can open the profile. A live browser request returned
+  vk_login_required. A real OpenRouter turn chose play_vk_music for the requested
+  VK track and reported the login requirement without a YouTube substitution.
+- The user previously deferred account login. Authenticated VK selectors and
+  actual tracks in the user's account remain unverified until that login.
+  No private live chats were read and no real messages were sent.
+- While VK music is active (or start remains uncertain), wake-free follow-up is
+  disabled after normal responses. A deliberate wake alone still grants a short
+  command window. Pause restores the configured conversational window. The guard
+  persists through a conversation reset because that reset does not stop music.
+
+Commands/setup: [VK_MUSIC.md](VK_MUSIC.md). The chosen voice A is unchanged.
+
 ## Version 0.4 update
 
 2026-11-05: 63 Python tests and nine native contract scenarios pass; Release

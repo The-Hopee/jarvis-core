@@ -2,9 +2,14 @@
 import sys
 
 from .config import ROOT, USER_DIR
-from .ipc import JsonProcessClient
+from .ipc import JsonProcessClient, KernelError
+from .http import ServiceError
 
 PROFILE = USER_DIR / 'vk-browser'
+
+
+class VKLoginRequired(ServiceError):
+    code = 'vk_login_required'
 
 
 class VKBrowser:
@@ -15,7 +20,14 @@ class VKBrowser:
         if self.process is None:
             command = [sys.executable.replace('pythonw.exe', 'python.exe'), '-m', 'jarvis.vk_worker', '--profile', str(PROFILE)]
             self.process = JsonProcessClient(command, timeout=50, cwd=ROOT)
-        return self.process.call(method, params)['result']
+        try:
+            return self.process.call(method, params)['result']
+        except KernelError as exc:
+            if exc.code == 'vk_login_required':
+                # Release the profile so the documented --vk-login command can
+                # actually open it. Never hold an idle login window's lock.
+                self.close()
+            raise
 
     def open(self, recipient):
         return self.call('open_dialog', recipient=recipient)
@@ -25,6 +37,20 @@ class VKBrowser:
 
     def send(self, recipient, text, operation_id):
         return self.call('send_message', recipient=recipient, text=text, operation_id=operation_id)
+
+    def search_music(self, query, limit=5):
+        return self.call('search_music', query=query, limit=limit)
+
+    def play_music(self, query, index=1, operation_id=''):
+        return self.call('play_music', query=query, index=index, operation_id=operation_id)
+
+    def play_music_result(self, index=1, operation_id=''):
+        return self.call('play_music_result', index=index, operation_id=operation_id)
+
+    def control_music(self, action, operation_id=''):
+        if self.process is None:
+            return {'status': 'idle', 'playback_verified': False}
+        return self.call('control_music', action=action, operation_id=operation_id)
 
     def close(self):
         if self.process:
