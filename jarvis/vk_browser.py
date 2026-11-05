@@ -12,6 +12,7 @@ PROFILE = USER_DIR / 'vk-browser'
 class VKBrowser:
     def __init__(self):
         self.process = None
+        self.music_active=None
 
     def call(self, method, **params):
         if self.process is None:
@@ -39,15 +40,23 @@ class VKBrowser:
         return self.call('search_music', query=query, limit=limit)
 
     def play_music(self, query, index=1, operation_id=''):
-        return self.call('play_music', query=query, index=index, operation_id=operation_id)
+        result=self.call('play_music', query=query, index=index, operation_id=operation_id)
+        self.music_active=True
+        return result
 
     def play_music_result(self, index=1, operation_id=''):
-        return self.call('play_music_result', index=index, operation_id=operation_id)
+        result=self.call('play_music_result', index=index, operation_id=operation_id)
+        self.music_active=True
+        return result
 
     def control_music(self, action, operation_id=''):
         if self.process is None:
+            self.music_active=False
             return {'status': 'idle', 'playback_verified': False}
-        return self.call('control_music', action=action, operation_id=operation_id)
+        result=self.call('control_music', action=action, operation_id=operation_id)
+        if result.get('pause_verified') or result.get('status')=='idle':self.music_active=False
+        elif result.get('playback_verified') or action in {'resume','next','previous'}:self.music_active=True
+        return result
 
     def close(self):
         if self.process:

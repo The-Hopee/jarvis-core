@@ -233,11 +233,17 @@ class Turn:
 
 
 class Assistant:
-    def __init__(self, registry, client=None):
+    def __init__(self, registry, client=None, *, stopped=None):
         self.registry, self.client = registry, client
         self.history = []
         self.conversation = Conversation()
         self.model_retry_at = 0
+        self.stopped=stopped or (lambda:False)
+
+    def check_cancelled(self):
+        if self.stopped():
+            from .jobs import JobCancelled
+            raise JobCancelled('Дальнейшая работа задачи отменена')
 
     def reset_conversation(self):
         self.history = []
@@ -263,6 +269,7 @@ class Assistant:
         return turn
 
     def respond(self, text, on_text=None):
+        self.check_cancelled()
         text = strip_wake(text)
         self.registry.begin_turn(text)
         if not text:
@@ -312,6 +319,7 @@ class Assistant:
                 {"role": "tool", "tool_call_id": "local-launch", "content": json.dumps(output, ensure_ascii=False)}])
         try:
             for step in range(6):
+                self.check_cancelled()
                 with measure('model_round', getattr(self.client, 'model', 'configured')):
                     if on_text and hasattr(self.client,'stream_complete') and (text_only or immediate and immediate[0]=='open_application'):
                         message=self.client.stream_complete(messages,[],allow_tools=False,on_text=on_text)
@@ -343,6 +351,7 @@ class Assistant:
                     retained = {k: message[k] for k in ("content", "tool_calls", "reasoning_details", "reasoning") if k in message}
                     messages.append({"role": "assistant", **retained})
                     for call_id, name, arguments in validated:
+                        self.check_cancelled()
                         cache_key = (name, json.dumps(arguments, sort_keys=True, ensure_ascii=False))
                         if cache_key not in cached:
                             cached[cache_key] = self.registry.execute(name, arguments)
@@ -361,6 +370,7 @@ class Assistant:
                 return self._remember(text, Turn(answer, records))
             raise ServiceError("Исчерпан лимит шагов")
         except ServiceError as exc:
+            self.check_cancelled()
             self.model_retry_at = time.monotonic() + (300 if re.search(r"HTTP (?:401|402|403)", str(exc)) else 30)
             # Never replay successful side effects if the final model request fails.
             if records:

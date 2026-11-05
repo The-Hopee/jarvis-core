@@ -4,7 +4,7 @@ import importlib.metadata
 import json
 import sys
 
-from .assistant import Assistant
+from .assistant import Assistant,Turn
 from .config import Settings
 from .http import ServiceError
 from .ipc import KernelClient, KernelError
@@ -17,6 +17,7 @@ from .runtime import AlreadyRunning, RuntimeOwner, is_running
 from .interaction import run_turn
 from .progress import ProgressFeedback
 from .telemetry import mark
+from .jobs import GuardedKernel,JobCancelled
 
 
 def display(turn):
@@ -25,6 +26,8 @@ def display(turn):
         print("[Сервис] " + turn.warning, file=sys.stderr)
     for record in turn.tools:
         output = record["output"]
+        if record['name'] in {'create_document','fill_document','open_document','background_artifact'} and output.get('ok') and output.get('result',{}).get('path'):
+            print('Файл: '+output['result']['path'],flush=True)
         if record['name'] == 'search_vk_music' and output.get('ok'):
             for index, track in enumerate(output['result'].get('tracks', []), 1):
                 print(f"  VK {index}. {track['artist']} — {track['title']}")
@@ -62,11 +65,19 @@ def main():
     group.add_argument("--vk-login", action="store_true", help="войти в VK в отдельном браузере Джарвиса")
     group.add_argument('--prepare-status-voice', action='store_true', help='однократно подготовить короткие статусы выбранным голосом')
     group.add_argument('--latency-report', action='store_true', help='показать обезличенные замеры задержек')
+    group.add_argument('--jobs',action='store_true',help='состояния сохранённых фоновых задач')
+    group.add_argument('--cancel-job',help='запросить отмену задачи по номеру или ID')
     parser.add_argument("--mute", action="store_true", help="выводить ответы только текстом")
     parser.add_argument('--latency-source', choices=('voice','text'), help='показывать метрики только голосовых или текстовых обращений')
     arguments = parser.parse_args()
     try:
         settings = Settings.load()
+        if arguments.jobs or arguments.cancel_job:
+            from .jobs import JobStore
+            store=JobStore()
+            value=store.cancel(arguments.cancel_job) if arguments.cancel_job else store.recent(16)
+            print(json.dumps(value,ensure_ascii=False,indent=2))
+            return 0
         if arguments.latency_report:
             from .telemetry import LOG_PATH, report
             paths = [LOG_PATH.with_name(LOG_PATH.name + '.' + str(n)) for n in (3, 2, 1)] + [LOG_PATH]
@@ -113,7 +124,7 @@ def main():
         config = ensure_native_config(settings)
         with ExitStack() as resources:
             runtime = None
-            if not arguments.doctor and arguments.once is None and not arguments.text:
+            if not arguments.doctor:
                 runtime = resources.enter_context(RuntimeOwner())
             kernel = resources.enter_context(KernelClient(settings.executable, config))
             ready = kernel.call("ping")["result"]
@@ -139,16 +150,20 @@ def main():
                                   "location_mode": "coordinates" if settings.latitude is not None else "city" if settings.city else "Windows then approximate IP",
                                   "applications": kernel.call("list_apps")["result"]["applications"], "packages": packages}, ensure_ascii=False, indent=2))
                 return 0
-            services = LocalServices(settings, kernel)
-            registry = ToolRegistry(kernel, services)
+            tools_kernel=GuardedKernel(kernel,runtime.stopped) if runtime is not None else kernel
+            services = LocalServices(settings, tools_kernel)
+            registry = ToolRegistry(tools_kernel, services,cancelled=runtime.stopped if runtime else None)
             resources.callback(registry.close)
             client = OpenRouterClient(settings.api_key, settings.model) if settings.api_key else None
-            assistant = Assistant(registry, client)
+            assistant = Assistant(registry, client,stopped=runtime.stopped if runtime else None)
             if not settings.api_key:
                 print("[Настройка] Ключ OpenRouter пока не задан: работают базовые локальные команды. Добавьте OPENROUTER_API_KEY в .env для свободного диалога.", file=sys.stderr)
             if arguments.once is not None:
                 turn = run_turn(assistant, speaker, arguments.once, display=display)
                 return 1 if turn.tools and any(not record["output"].get("ok") for record in turn.tools) else 0
+            from .home_jobs import HomeJobs
+            jobs=resources.enter_context(HomeJobs(tools_kernel,registry.vk,settings,stopped=runtime.stopped if runtime else None))
+            registry.home_jobs=jobs
             if arguments.text:
                 print("Текстовый режим. Для выхода: /exit. Голосовой ответ включён, если не задан --mute.")
                 while True:
@@ -157,18 +172,34 @@ def main():
                         break
                     if not text:
                         continue
-                    run_turn(assistant, speaker, text, display=display)
+                    for notification in jobs.drain(assistant):display(notification);speaker.speak(notification.text)
+                    control=jobs.control(text)
+                    background=jobs.background_text(text)
+                    if control:display(control);speaker.speak(control.text)
+                    elif background:
+                        try:
+                            job=jobs.submit(background,assistant)
+                            print(f"Задача {job['number']} принята в очередь.",flush=True)
+                            speaker.speak('Да, сэр.')
+                        except ServiceError as exc:print(str(exc),flush=True)
+                    else:run_turn(assistant, speaker, text, display=display)
             else:
                 from .voice import VoiceInput
                 voice = VoiceInput(settings)
                 print("Голосовой режим: скажите «Джарвис, состояние машины». Выход: «Джарвис, выход» или Ctrl+C.", flush=True)
                 while not runtime.stopped():
+                    for notification in jobs.drain(assistant):
+                        display(notification)
+                        if not runtime.stopped():speaker.speak(notification.text,stopped=runtime.stopped)
+                        music=registry.vk.music_active if registry.vk.music_active is not None else assistant.conversation.music_playing
+                        voice.after_response(0 if music else None)
                     print("[Микрофон] Можно продолжать без имени…" if voice.gate.active() else "[Микрофон] Слушаю обращение «Джарвис»…", flush=True)
                     feedback = ProgressFeedback(speaker, delay=settings.progress_delay,
                                                 enabled=settings.progress_enabled, stopped=runtime.stopped)
                     try:
-                        text = voice.next_command(stop_requested=runtime.stopped, on_accepted=feedback.start)
+                        text = voice.next_command(stop_requested=runtime.stopped, on_accepted=feedback.start,interrupt_requested=jobs.store.has_notifications)
                         if text is None:
+                            if voice.last_interrupted:continue
                             break
                         trace = voice.last_trace
                         with trace.activate():
@@ -183,9 +214,23 @@ def main():
                                 assistant.reset_conversation()
                                 continue
                         print("Ты: " + (text or "Джарвис"), flush=True)
-                        run_turn(assistant, speaker, text, trace=trace, feedback=feedback, display=display, stopped=runtime.stopped)
+                        control=jobs.control(text)
+                        background=jobs.background_text(text)
+                        if control or background:
+                            with trace.activate():
+                                feedback.stop()
+                                if control:
+                                    display(control);speaker.speak(control.text,stopped=runtime.stopped)
+                                else:
+                                    try:
+                                        job=jobs.submit(background,assistant)
+                                        print(f"Задача {job['number']} принята в очередь.",flush=True)
+                                        mark('job_accepted');speaker.speak('Да, сэр.',stopped=runtime.stopped)
+                                    except ServiceError as exc:speaker.speak(str(exc),stopped=runtime.stopped)
+                            if background:voice.after_response(0);continue
+                        else:run_turn(assistant, speaker, text, trace=trace, feedback=feedback, display=display, stopped=runtime.stopped)
                         if not runtime.stopped():
-                            playing_music = assistant.conversation.music_playing
+                            playing_music = registry.vk.music_active if registry.vk.music_active is not None else assistant.conversation.music_playing
                             voice.after_response((8 if not text else 0) if playing_music else None)
                     finally:
                         feedback.stop()
@@ -195,7 +240,7 @@ def main():
     except AlreadyRunning as exc:
         print(str(exc))
         return 0
-    except (KeyboardInterrupt, EOFError):
+    except (KeyboardInterrupt, EOFError,JobCancelled):
         print("\nДжарвис остановлен.")
         return 0
     except (KernelError, ServiceError, RuntimeError, OSError, ValueError) as exc:

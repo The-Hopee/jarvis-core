@@ -11,9 +11,15 @@ SESSION = USER_DIR / 'telegram/user'
 
 
 class TelegramAPI:
-    def __init__(self, settings, ledger=None):
+    def __init__(self, settings, ledger=None, *, cancelled=None):
         self.settings = settings
         self.ledger = ledger or MessageLedger()
+        self.cancelled=cancelled or (lambda:False)
+
+    def check_cancelled(self):
+        if self.cancelled():
+            from .jobs import JobCancelled
+            raise JobCancelled('Задача отменена до отправки')
 
     def client(self):
         from telethon import TelegramClient
@@ -32,6 +38,7 @@ class TelegramAPI:
                 await client.connect()
                 if not await client.is_user_authorized():
                     raise ServiceError('Сессия Telegram не авторизована. Повторите --telegram-login')
+                self.check_cancelled()
                 return await operation(client)
             finally:
                 await client.disconnect()
@@ -40,6 +47,8 @@ class TelegramAPI:
         except ServiceError:
             raise
         except Exception as exc:
+            from .jobs import JobCancelled
+            if isinstance(exc,JobCancelled):raise
             raise ServiceError('Telegram API недоступен или отклонил запрос: ' + type(exc).__name__) from exc
 
     async def resolve(self, client, recipient):
@@ -100,6 +109,7 @@ class TelegramAPI:
             if entity is None:
                 return selected
             target = selected['recipient']
+            self.check_cancelled()
             key, previous = self.ledger.begin(operation_id, 'telegram', target['id'])
             if previous:
                 return {**previous, 'reused_receipt': True}

@@ -52,7 +52,7 @@ def normalize_url(target: str) -> str:
 
 
 class ToolRegistry:
-    def __init__(self, kernel, services):
+    def __init__(self, kernel, services, *, shared_vk=None, resource_locks=None, cancelled=None):
         self.kernel, self.services = kernel, services
         self.youtube = YouTube(kernel)
         self.user_request, self.request_id, self.can_send = "", uuid.uuid4().hex, False
@@ -66,8 +66,13 @@ class ToolRegistry:
         from .vk_browser import VKBrowser
         from .openrouter import OpenRouterClient
         settings = getattr(services, 'settings', Settings())
-        self.telegram = TelegramAPI(settings)
-        self.vk = VKBrowser()
+        self.telegram = TelegramAPI(settings,cancelled=cancelled)
+        self.vk = shared_vk if shared_vk is not None else VKBrowser()
+        self._owns_vk=shared_vk is None
+        from .jobs import RESOURCES
+        self.resource_locks=resource_locks or RESOURCES
+        self.cancelled=cancelled or (lambda:False)
+        self.home_jobs=None
         self.chat_model = OpenRouterClient(settings.api_key, settings.model, max_tokens=1200) if settings.api_key else None
         from .documents import Documents
         self.documents = Documents(settings, kernel)
@@ -97,7 +102,7 @@ class ToolRegistry:
         from .coding import projects, start_job, job_status
         self.register(Tool("list_coding_projects", "Показать локально зарегистрированные проекты для кодящих агентов.", schema(), lambda: {"projects": list(projects())}))
         self.register(Tool("start_coding_task", "Запустить кодящую задачу для зарегистрированного проекта: мастер, до двух параллельных субагентов, тесты и ревью в отдельных Git worktree. Возвращает job_id; результат проверяй coding_job_status. Не обещай готовность до завершения.", schema({"project_id": text, "goal": {"type": "string", "minLength": 1, "maxLength": 8000}}, ["project_id", "goal"]), self.start_coding_task))
-        self.register(Tool("coding_job_status", "Проверить состояние кодящей задачи, ветку результата, проверки и замечания ревью.", schema({"job_id": {"type": "string", "pattern": "^[a-f0-9]{24}$"}}, ["job_id"]), job_status))
+        self.register(Tool("coding_job_status", "Проверить состояние кодящей задачи, ветку результата, проверки и замечания ревью.", schema({"job_id": {"type": "string", "pattern": "^[a-f0-9]{24}$"}}, ["job_id"]), self.coding_status))
         target = {"platform": {"type": "string", "enum": ["telegram", "vk"]}, "recipient": text}
         self.register(Tool("open_dialog", "Открыть конкретный личный диалог Telegram или VK. Если совпало несколько людей, покажи кандидатов и уточни адресата.", schema(target, ["platform", "recipient"]), self.open_dialog))
         self.register(Tool("read_dialog", "Прочитать последние сообщения выбранного личного диалога и отметить исходящие сообщения владельца.", schema({**target, "limit": {"type": "integer", "minimum": 1, "maximum": 30}}, ["platform", "recipient"]), self.read_dialog))
@@ -161,10 +166,25 @@ class ToolRegistry:
         from .coding import start_job
         if not self.can_code:
             raise ServiceError('Кодящая задача не запрошена в текущем обращении пользователя')
+        if self.home_jobs is not None:
+            from .coding import project_config
+            if not project_config(project_id).get('checks'):raise ServiceError('Для проекта нужны команды проверки')
+            job=self.home_jobs.store.submit('coding',{'project_id':project_id,'goal':goal})
+            return {'job_id':job['id'],'number':job['number'],'status':'queued','status_tool':'coding_job_status'}
         return start_job(project_id, goal)
 
     def close(self):
-        self.vk.close()
+        if self._owns_vk:self.vk.close()
+
+    def coding_status(self,job_id):
+        from .coding import job_status
+        if self.home_jobs is not None:
+            try:
+                job=self.home_jobs.store.get(job_id)
+                if job['kind']=='coding':
+                    return {'job_id':job_id,'status':job['status'],'stage':job['stage'],**((job.get('result') or {}).get('coding_result') or {})}
+            except ServiceError:pass
+        return job_status(job_id)
 
     def _backend(self, platform):
         return self.telegram if platform == 'telegram' else self.vk
@@ -178,6 +198,7 @@ class ToolRegistry:
         return self._backend(platform).read(recipient, limit=limit)
 
     def send_message(self, platform, recipient, text):
+        self.check_cancelled()
         if not self.can_send:
             raise ServiceError('В текущем запросе нет разрешения на отправку. Для черновика используй draft_reply.')
         return self._backend(platform).send(recipient, text, operation_id=self.request_id)
@@ -216,11 +237,32 @@ class ToolRegistry:
 
     def execute(self, name, arguments):
         from .telemetry import measure
+        from contextlib import ExitStack
+        self.check_cancelled()
         with measure('tool', name if name in self.tools else 'unknown') as timing:
-            result = self._execute(name, arguments)
+            with ExitStack() as resources:
+                key=self.resource_key(name,arguments)
+                if key:
+                    with measure('resource_wait',key,foreground=False):resources.enter_context(self.resource_locks.hold(key,self.cancelled))
+                self.check_cancelled()
+                result = self._execute(name, arguments)
             if not result.get('ok'):
                 timing['status'] = 'error'
             return result
+
+    def check_cancelled(self):
+        if self.cancelled():
+            from .jobs import JobCancelled
+            raise JobCancelled('Дальнейшая работа задачи отменена')
+
+    @staticmethod
+    def resource_key(name,arguments):
+        if name in {'open_dialog','read_dialog','send_message','draft_reply','reply_in_my_style'}:
+            return 'vk_profile' if isinstance(arguments,dict) and arguments.get('platform')=='vk' else 'telegram_session'
+        if name in {'search_vk_music','play_vk_music','play_vk_music_result','control_vk_music'}:return 'vk_profile'
+        if name in {'list_documents','read_document','create_document','fill_document','open_document'}:return 'documents'
+        if name in {'minimize_windows','open_application','set_volume','adjust_volume','mute_audio'}:return 'desktop'
+        return None
 
     def _execute(self, name, arguments):
         tool = self.tools.get(name)

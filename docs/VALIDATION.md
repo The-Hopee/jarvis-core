@@ -1,5 +1,25 @@
 # Validation
 
+## Version 0.7 — durable background jobs
+
+2026-11-05: **121 Python tests pass**, **9 native scenarios pass**, 0.7.0
+EXE/DLL rebuilt. Queue tests exercise two concurrent workers, a queued task
+cancelled before execution, late model replies after cancellation, dependencies,
+failed dependencies, bounded capacity, cancellation during a resource wait,
+single coding-job admission, shared VK ownership and idle microphone release.
+A real owned 30-second test process was cancelled in under five seconds;
+unrelated processes were not selected. Interrupted jobs are not replayed.
+
+Silent live integration observed queued/queued → running/running →
+running/completed → completed/completed using real SQLite, model and C++ probe.
+Only the read-only system-status tool was exposed in that probe. Real muted
+text CLI on an isolated LOCALAPPDATA profile accepted background work, printed
+completion, handled a status query and exited with code zero without a traceback.
+
+Data: [stage07-2026-11-05.json](benchmarks/stage07-2026-11-05.json).
+Commands/limitations: [UPGRADE_07.md](UPGRADE_07.md). New sending code paths were
+not exercised against real people. Heavy-model coding acceptance remains open.
+
 ## Version 0.6 — incremental voice and ASR comparison
 
 2026-11-05: **111 Python tests pass**, **9 native scenarios pass**, 0.6.0

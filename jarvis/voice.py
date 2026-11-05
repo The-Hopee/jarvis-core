@@ -1,5 +1,6 @@
 """Local Russian ASR. Microphone is open only while listening, never during TTS."""
 from collections import deque
+from array import array
 import json
 import math
 from pathlib import Path
@@ -130,7 +131,7 @@ class VoiceInput:
             print("[Распознавание] " + str(exc) + " Использую локальное распознавание.", file=sys.stderr, flush=True)
             return command
 
-    def next_command(self, stop_requested=None, on_accepted=None):
+    def next_command(self, stop_requested=None, on_accepted=None, interrupt_requested=None):
         import sounddevice as sd
         import vosk
         audio = queue.Queue(maxsize=32)
@@ -139,6 +140,7 @@ class VoiceInput:
         if hasattr(recognizer, 'SetWords'):
             recognizer.SetWords(True)
         self.last_trace = None
+        self.last_interrupted=False
         stop_requested = stop_requested or (lambda: False)
         # Keep at most 45 s of the current utterance, never idle room audio on disk.
         chunks = deque()
@@ -147,6 +149,7 @@ class VoiceInput:
         audio_origin, endpoint, estimated_end = None, None, None
         timing_valid = True
         audio_seconds = 0
+        last_acoustic=0
 
         def callback(data, frames, timing, status):
             if status:
@@ -188,6 +191,10 @@ class VoiceInput:
                     audio_origin = captured_end - duration
                 if not errors.empty():
                     timing_valid = False
+                if interrupt_requested is not None:
+                    samples=array('h');samples.frombytes(chunk)
+                    if samples and sum(x*x for x in samples)/len(samples)>400*400:
+                        last_acoustic=time.monotonic()
                 buffered += len(chunk)
                 while buffered > self.sample_rate * 2 * 45 and chunks:
                     buffered -= len(chunks.popleft())
@@ -210,6 +217,11 @@ class VoiceInput:
                         break
                     chunks.clear()
                     buffered = 0
+                if interrupt_requested is not None and interrupt_requested():
+                    partial=json.loads(recognizer.PartialResult()).get('partial','') if hasattr(recognizer,'PartialResult') else ''
+                    if not partial and time.monotonic()-last_acoustic>.6:
+                        self.last_interrupted=True
+                        return None
         if stop_requested():
             return None
         if selected is None:

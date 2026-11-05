@@ -1,0 +1,49 @@
+{
+  "stage07-jobs-smoke.json": {
+    "states": [
+      [
+        "queued",
+        "queued"
+      ],
+      [
+        "running",
+        "running"
+      ],
+      [
+        "running",
+        "completed"
+      ],
+      [
+        "completed",
+        "completed"
+      ]
+    ],
+    "results": [
+      {
+        "number": 1,
+        "status": "completed",
+        "has_result": true
+      },
+      {
+        "number": 2,
+        "status": "completed",
+        "has_result": true
+      }
+    ],
+    "notifications": 2,
+    "audio_played": false,
+    "tools_exposed": [
+      "get_system_status"
+    ],
+    "no_automatic_replay": true
+  },
+  "stage07-cli-smoke.json": {
+    "exit_code": 0,
+    "accepted": true,
+    "completion_notification": true,
+    "no_active_jobs": true,
+    "traceback": false,
+    "muted": true,
+    "isolated_profile": true
+  }
+}

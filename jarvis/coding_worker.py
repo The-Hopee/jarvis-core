@@ -12,10 +12,11 @@ from .openrouter import OpenRouterClient
 
 
 class WorkspaceTools:
-    def __init__(self, root, scopes, checks):
+    def __init__(self, root, scopes, checks, cancelled=None):
         self.root = Path(root).resolve()
         self.scopes = [relative_path(scope) for scope in scopes]
         self.checks, self.changed = checks, set()
+        self.cancelled=cancelled or (lambda:False)
 
     def path(self, value, write=False):
         relative = relative_path(value)
@@ -41,7 +42,7 @@ class WorkspaceTools:
             self.changed.add(relative)
             return {'written': relative}
         if name == 'run_checks':
-            return {'checks': [run_check(self.root, command) for command in self.checks]}
+            return {'checks': [run_check(self.root, command,cancelled=self.cancelled) for command in self.checks]}
         raise ServiceError('Неизвестный инструмент субагента')
 
 
@@ -57,7 +58,7 @@ def definitions():
 
 
 def run_worker(spec, client):
-    tools = WorkspaceTools(spec['workspace'], spec['task']['paths'], spec.get('checks', []))
+    tools = WorkspaceTools(spec['workspace'], spec['task']['paths'], spec.get('checks', []),cancelled=lambda:not parent_alive(spec))
     catalog = definitions()
     schemas = {tool['function']['name']: tool['function']['parameters'] for tool in catalog}
     messages = [{'role': 'system', 'content': 'You are a coding subagent. Implement only your assigned task. Read relevant files first. '
@@ -66,6 +67,7 @@ def run_worker(spec, client):
                 {'role': 'user', 'content': json.dumps(spec['task'], ensure_ascii=False)}]
     summary = ''
     for step in range(10):
+        check_parent(spec)
         message = client.complete(messages, catalog, allow_tools=step < 9)
         calls = message.get('tool_calls') or []
         if not calls:
@@ -75,6 +77,7 @@ def run_worker(spec, client):
             raise ServiceError('Субагент превысил лимит вызовов')
         messages.append({'role': 'assistant', **{key: message[key] for key in ('content', 'tool_calls', 'reasoning_details', 'reasoning') if key in message}})
         for call in calls:
+            check_parent(spec)
             function = call.get('function', {})
             name = function.get('name')
             try:
@@ -89,10 +92,35 @@ def run_worker(spec, client):
     else:
         raise ServiceError('Субагент не завершил задачу')
     if tools.changed:
+        check_parent(spec)
         git(tools.root, 'add', '--', *sorted(tools.changed))
         if git(tools.root, 'diff', '--cached', '--name-only'):
             git(tools.root, 'commit', '-m', 'Jarvis worker: ' + spec['task']['id'])
     return {'commit': git(tools.root, 'rev-parse', 'HEAD'), 'summary': summary, 'changed_files': sorted(tools.changed)}
+
+
+def parent_alive(spec):
+    pid=spec.get('parent_pid')
+    if not pid:return True
+    import ctypes
+    from ctypes import wintypes
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    kernel.OpenProcess.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
+    kernel.OpenProcess.restype=wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+    kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+    handle=kernel.OpenProcess(0x00100000,False,pid)
+    alive=False
+    if handle:
+        try:alive=kernel.WaitForSingleObject(handle,0)==0x102
+        finally:kernel.CloseHandle(handle)
+    return alive
+
+
+def check_parent(spec):
+    if not parent_alive(spec):
+        from .jobs import JobCancelled
+        raise JobCancelled('Родительский процесс завершён; дальнейшие действия остановлены')
 
 
 def main():

@@ -5,7 +5,7 @@
 
 namespace jarvis {
 using Json = nlohmann::json;
-constexpr const char* kVersion = "0.6.0";
+constexpr const char* kVersion = "0.7.0";
 constexpr std::size_t kMaxRequestBytes = 1024 * 1024;
 
 class Kernel final {
