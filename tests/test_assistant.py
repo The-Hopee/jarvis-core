@@ -282,7 +282,7 @@ class RealIPCTests(unittest.TestCase):
             with KernelClient(Settings().executable) as kernel:
                 registry = ToolRegistry(kernel, LocalServices(Settings(), kernel))
                 client = OpenRouterClient('local-test-key', 'test-model', transport)
-                turn = Assistant(registry, client).respond('Состояние компьютера')
+                turn = Assistant(registry, client).respond('Прочитай свежие показатели компьютера и оцени их')
             self.assertEqual(turn.warning, '', turn.warning)
             self.assertEqual(turn.text, 'Метрики компьютера получены.')
             self.assertEqual(len(requests), 2)

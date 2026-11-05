@@ -5,6 +5,7 @@ Replays 32 warm cases and the same first four with fresh local model/processes.
 """
 from collections import deque
 from contextlib import ExitStack
+from dataclasses import replace
 import argparse
 import json
 from pathlib import Path
@@ -112,14 +113,21 @@ def main():
     parser.add_argument('--cold',type=int,default=4)
     parser.add_argument('--mode',choices=('both','warm','cold'),default='both')
     parser.add_argument('--silent',action='store_true',help='synthesize responses without playing them; playback metrics are omitted')
+    parser.add_argument('--virtual-output',action='store_true',help='stream into a realtime silent PCM sink; dispatch timings are virtual')
     parser.add_argument('--output',type=Path,default=USER_DIR/'benchmarks/stage05')
     args=parser.parse_args()
     if not args.live or not 1<=args.count<=len(CASES) or not 0<=args.cold<=args.count:
         parser.error('Use --live, count 1..32, cold 0..count. No private accounts are exercised.')
     sys.stdout.reconfigure(encoding='utf-8')
+    virtual_patch=None
+    if args.virtual_output:
+        from scripts.stream_smoke import SilentOutput
+        virtual_patch=patch('sounddevice.RawOutputStream',SilentOutput)
     import vosk
     vosk.SetLogLevel(-1)
     settings=Settings.load()
+    if args.silent:
+        settings=replace(settings,tts_streaming=False)
     if not settings.api_key:
         parser.error('OpenRouter is not configured')
     args.output.mkdir(parents=True,exist_ok=True)
@@ -134,6 +142,7 @@ def main():
         parser.error('Choose a fresh output directory; previous measurements are preserved.')
     outcomes=[]
     with ExitStack() as resources:
+        if virtual_patch:resources.enter_context(virtual_patch)
         initial=time.monotonic()
         kernel=resources.enter_context(KernelClient(settings.executable))
         model=vosk.Model(str(settings.model_path))
@@ -163,10 +172,10 @@ def main():
                 voice.settings,voice.cloud_retry_at,voice.last_trace=settings,0,None
                 voice.gate,voice.messages=WakeGate(),deque(maxlen=5)
                 voice.gate.resume(120)
-                feedback=ProgressFeedback(active_speaker,delay=settings.progress_delay,enabled=not args.silent)
+                feedback=ProgressFeedback(active_speaker,delay=settings.progress_delay,enabled=not args.silent and not args.virtual_output)
                 def accepted(trace):
                     trace.source='benchmark_'+mode
-                    trace.sink=lambda row:append_record({**row,'case_id':index+1,'startup_ms':startup_ms},log)
+                    trace.sink=lambda row:append_record({**row,'case_id':index+1,'startup_ms':startup_ms,'playback_is_virtual':args.virtual_output},log)
                     feedback.start(trace)
                 try:
                     with patch('sounddevice.RawInputStream',replay.factory):
@@ -191,6 +200,7 @@ def main():
                     cold_kernel.close()
     results={'method':'synthetic WAV replay at realtime speed; live ASR/LLM/TTS; system probe real; all other actions fixtures; no microphone or chats',
              'playback':not args.silent,
+             'playback_is_virtual':args.virtual_output,
              'warm':report([log],source='benchmark_warm'),'cold':report([log],source='benchmark_cold'),
              'outcomes':outcomes}
     (args.output/'report.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')

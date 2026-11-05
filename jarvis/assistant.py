@@ -12,6 +12,8 @@ from .conversation import Conversation
 from .music_intents import music_intent
 from .telemetry import measure
 
+SIMPLE_READ = re.compile(r'(?:какая\s+)?погода(?:\s+сейчас)?[.!?]*|(?:проверь\s+)?состояни[еяи]\s+(?:машины|компьютера|пк)[.!?]*',re.I)
+
 SYSTEM_PROMPT = """Ты Джарвис, домашний голосовой помощник пользователя. Отвечай по-русски,
 спокойно и кратко. На бытовую команду обычно достаточно 1–2 коротких предложений,
 примерно 20–35 слов: результат и при необходимости один уместный вопрос. Не повторяй
@@ -249,7 +251,7 @@ class Assistant:
                 and turn.tools[0]['name'] in {'get_system_status', 'get_weather'}):
             record = turn.tools[0]
             intent = local_intent(text)
-            simple = re.fullmatch(r'(?:какая\s+)?погода(?:\s+сейчас)?[.!?]*|(?:проверь\s+)?состояни[еяи]\s+(?:машины|компьютера|пк)[.!?]*', strip_wake(text), re.I)
+            simple = SIMPLE_READ.fullmatch(strip_wake(text))
             detailed = re.search(r'подроб|объясни|почему|проанализ|посовет|\bоцени\b|\bзатем\b|\bпотом\b|\sи\s', text, re.I)
             if (simple and intent and intent[0] == record['name'] and record['name'] in {'get_system_status', 'get_weather'}
                     and not detailed and record['output'].get('ok')
@@ -260,7 +262,7 @@ class Assistant:
                         {"role": "assistant", "content": turn.text}][-20:]
         return turn
 
-    def respond(self, text):
+    def respond(self, text, on_text=None):
         text = strip_wake(text)
         self.registry.begin_turn(text)
         if not text:
@@ -280,6 +282,9 @@ class Assistant:
             if inherited_send:
                 self.registry.can_send = True
             return self._remember(text, self._execute_local(name, arguments))
+        simple = local_intent(text) if SIMPLE_READ.fullmatch(text) else None
+        if simple and simple[0] in {'get_system_status','get_weather'}:
+            return self._remember(text,self._execute_local(*simple))
         if self.client is None or time.monotonic() < self.model_retry_at:
             return self._remember(text, self._offline(text))
         timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -293,6 +298,9 @@ class Assistant:
         # then ask the model for one contextual reply instead of spending a
         # model round-trip deciding how to launch VS Code.
         immediate = local_intent(text)
+        greeting=re.fullmatch(r'(?:привет|здравствуй\w*|я дома|ты на связи)[,.!? ]*',text,re.I)
+        text_only=bool(on_text and not immediate and (greeting or re.match(r'^(?:сколько будет\b|что такое\b)',text,re.I))
+                       and not re.search(r'\b(?:погод|сайт|компьютер|машин|откро|запуст|напиш|отправ|сохран|включ|сдела|созда|постав|удал|измен|прочита)\w*',text,re.I))
         if immediate and immediate[0] == "open_application":
             name, arguments = immediate
             output = self.registry.execute(name, arguments)
@@ -305,7 +313,10 @@ class Assistant:
         try:
             for step in range(6):
                 with measure('model_round', getattr(self.client, 'model', 'configured')):
-                    message = self.client.complete(messages, self.registry.definitions(), allow_tools=step < 5)
+                    if on_text and hasattr(self.client,'stream_complete') and (text_only or immediate and immediate[0]=='open_application'):
+                        message=self.client.stream_complete(messages,[],allow_tools=False,on_text=on_text)
+                    else:
+                        message = self.client.complete(messages, self.registry.definitions(), allow_tools=step < 5)
                 calls = message.get("tool_calls") or []
                 if calls:
                     if step == 5 or not isinstance(calls, list) or len(calls) > 8 or calls_used + len(calls) > 12:

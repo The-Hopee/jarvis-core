@@ -165,7 +165,7 @@ class Speaker:
             print("[Голос] Записанная реплика недоступна; использую синтез речи.", file=sys.stderr)
             return False
 
-    def speak(self, text, *, before_playback=None):
+    def speak(self, text, *, before_playback=None, stopped=None):
         if self.muted or self.settings.tts == "off":
             return
         text = spoken_text(text)
@@ -176,6 +176,13 @@ class Speaker:
         if self.settings.tts in {"elevenlabs", "openrouter"} and time.monotonic() >= self.cloud_retry_at:
             try:
                 from .cloud_voice import CloudVoice, OpenRouterVoice
+                if self.settings.tts=='openrouter' and self.settings.tts_streaming:
+                    from .audio_stream import play_stream,PartialSpeechError
+                    try:
+                        play_stream(self,OpenRouterVoice(self.settings).stream(text),before_playback=before_playback,stopped=stopped)
+                    except PartialSpeechError:
+                        print('[Голос] Озвучивание прервано. Полный ответ остаётся текстом.',file=sys.stderr)
+                    return
                 with tempfile.TemporaryDirectory(prefix="jarvis-cloud-voice-") as directory:
                     path = Path(directory) / "speech.mp3"
                     provider = OpenRouterVoice if self.settings.tts == "openrouter" else CloudVoice

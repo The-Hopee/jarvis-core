@@ -64,6 +64,8 @@ class Settings:
     conversation_seconds: int = 40
     progress_enabled: bool = True
     progress_delay: float = 0.8
+    tts_streaming: bool = True
+    llm_streaming: bool = True
     document_roots: tuple[Path, ...] = (Path.home() / "Documents",)
     vscode_path: str = ""
     onlyoffice_path: str = ""
@@ -96,8 +98,10 @@ class Settings:
         if not 0 <= conversation_seconds <= 180:
             raise ValueError("JARVIS_CONVERSATION_SECONDS: от 0 до 180")
         progress = values.get('JARVIS_PROGRESS', '1').strip()
+        tts_streaming=values.get('JARVIS_TTS_STREAMING','1').strip()
+        llm_streaming=values.get('JARVIS_LLM_STREAMING','1').strip()
         progress_delay = float(values.get('JARVIS_PROGRESS_DELAY', '0.8'))
-        if progress not in {'0', '1'} or not math.isfinite(progress_delay) or not .2 <= progress_delay <= 10:
+        if progress not in {'0', '1'} or tts_streaming not in {'0','1'} or llm_streaming not in {'0','1'} or not math.isfinite(progress_delay) or not .2 <= progress_delay <= 10:
             raise ValueError('JARVIS_PROGRESS: 0 или 1; JARVIS_PROGRESS_DELAY: от 0.2 до 10 секунд')
         document_roots = tuple(Path(p.strip()).expanduser().resolve() for p in
                                values.get("JARVIS_DOCUMENT_ROOTS", str(Path.home() / "Documents")).split(";") if p.strip())
@@ -140,6 +144,8 @@ class Settings:
                    elevenlabs_asr_model=values.get("ELEVENLABS_ASR_MODEL", "scribe_v2").strip(),
                    conversation_seconds=conversation_seconds, document_roots=document_roots,
                    progress_enabled=progress == '1', progress_delay=progress_delay,
+                   tts_streaming=tts_streaming=='1',
+                   llm_streaming=llm_streaming=='1',
                    vscode_path=values.get("JARVIS_VSCODE_PATH", "").strip(),
                    onlyoffice_path=values.get("JARVIS_ONLYOFFICE_PATH", "").strip(),
                    model_path=Path(values.get("JARVIS_VOSK_MODEL", str(root / "models/vosk-model-small-ru-0.22"))))

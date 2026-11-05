@@ -1,0 +1,122 @@
+{
+  "method": "Synthetic recordings and live cloud services. No private chats. PCM smoke outputs are explicitly virtual; one separate short physical output check succeeded.",
+  "asr": {
+    "vosk": {
+      "n": 32,
+      "errors": 0,
+      "p50_ms": 574.625,
+      "p95_ms": 712.055,
+      "normalized_wer": 0.0625
+    },
+    "elevenlabs/scribe-v2": {
+      "n": 32,
+      "errors": 0,
+      "p50_ms": 1186.259,
+      "p95_ms": 1654.362,
+      "normalized_wer": 0.0139
+    },
+    "openai/whisper-large-v3-turbo": {
+      "n": 32,
+      "errors": 0,
+      "p50_ms": 2523.974,
+      "p95_ms": 8134.274,
+      "normalized_wer": 0.0486
+    }
+  },
+  "stream": {
+    "model": "fish-audio/s2.1-pro",
+    "voice_reference_preserved": true,
+    "records": [
+      {
+        "first_pcm_ms": 2532.006,
+        "complete_ms": 3189.451,
+        "audio_seconds": 2.534,
+        "pcm_chunks": 98,
+        "played": false
+      },
+      {
+        "first_pcm_ms": 1948.068,
+        "complete_ms": 3307.389,
+        "audio_seconds": 4.153,
+        "pcm_chunks": 160,
+        "played": false
+      }
+    ]
+  },
+  "virtual_system_request": {
+    "turns": 1,
+    "sources": {
+      "benchmark_warm": 1
+    },
+    "speech_end_sources": {
+      "vosk_word_end_estimate": 1
+    },
+    "metrics": {
+      "answer_playback_start_ms": {
+        "n": 1,
+        "p50_ms": 4540.38,
+        "p95_ms": 4540.38
+      },
+      "answer_ready_ms": {
+        "n": 1,
+        "p50_ms": 2338.357,
+        "p95_ms": 2338.357
+      },
+      "asr_final_ms": {
+        "n": 1,
+        "p50_ms": 2019.676,
+        "p95_ms": 2019.676
+      },
+      "asr_ms": {
+        "n": 1,
+        "p50_ms": 1108.472,
+        "p95_ms": 1108.472
+      },
+      "endpoint_final_ms": {
+        "n": 1,
+        "p50_ms": 909.697,
+        "p95_ms": 909.697
+      },
+      "model_ms": {
+        "n": 1,
+        "p50_ms": 0.0,
+        "p95_ms": 0
+      },
+      "playback_ms": {
+        "n": 1,
+        "p50_ms": 10203.387,
+        "p95_ms": 10203.387
+      },
+      "status_playback_ms": {
+        "n": 1,
+        "p50_ms": 0.0,
+        "p95_ms": 0
+      },
+      "tool_ms": {
+        "n": 1,
+        "p50_ms": 306.572,
+        "p95_ms": 306.572
+      },
+      "tts_first_byte_ms": {
+        "n": 1,
+        "p50_ms": 4458.557,
+        "p95_ms": 4458.557
+      },
+      "tts_ms": {
+        "n": 1,
+        "p50_ms": 2197.961,
+        "p95_ms": 2197.961
+      },
+      "turn_end_ms": {
+        "n": 1,
+        "p50_ms": 14743.908,
+        "p95_ms": 14743.908
+      }
+    }
+  },
+  "physical_output_check": {
+    "tts_first_byte_ms": 5321.98,
+    "playback_dispatch_ms": 5603.586,
+    "complete_ms": 7191.184
+  }
+}

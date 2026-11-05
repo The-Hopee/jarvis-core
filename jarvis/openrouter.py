@@ -7,6 +7,14 @@ class OpenRouterClient:
         self._api_key, self.model, self.http = api_key, model, http
         self.max_tokens = max_tokens
 
+    def stream_complete(self,messages,tools,*,allow_tools=False,on_text=None):
+        from .text_stream import events,completion
+        if allow_tools or tools:
+            raise ServiceError('Голосовой поток разрешён только для ответа без инструментов')
+        body={'model':self.model,'messages':messages,'max_tokens':self.max_tokens,'stream':True}
+        with measure('model',self.model):
+            return completion(events(body,{'Authorization':'Bearer '+self._api_key,'X-Title':'Jarvis Home'}),on_text)
+
     def complete(self, messages: list, tools: list, *, allow_tools=True):
         if not self._api_key:
             raise ServiceError("Добавьте OPENROUTER_API_KEY в .env")

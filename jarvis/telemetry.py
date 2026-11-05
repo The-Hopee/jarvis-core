@@ -52,7 +52,7 @@ class TurnTrace:
         self.source, self.speech_end_source = _label(source), _label(speech_end_source)
         self.created_at = datetime.now(timezone.utc).isoformat(timespec='milliseconds')
         self.events, self.spans = {}, []
-        self._phase = ('idle', '')
+        self._active = []
         self._lock, self._finished = threading.RLock(), False
 
     @contextmanager
@@ -70,15 +70,15 @@ class TurnTrace:
 
     def phase(self):
         with self._lock:
-            return self._phase
+            return self._active[-1][1] if self._active else ('idle','')
 
     @contextmanager
     def measure(self, name, operation='', *, foreground=True):
         start, name, operation = self.clock(), _label(name), _label(operation) if operation else ''
         with self._lock:
-            previous = self._phase
+            token=object()
             if foreground:
-                self._phase = (name, operation)
+                self._active.append((token,(name,operation)))
         outcome = {'status': 'ok'}
         try:
             yield outcome
@@ -89,7 +89,7 @@ class TurnTrace:
             end = self.clock()
             with self._lock:
                 if foreground:
-                    self._phase = previous
+                    self._active=[item for item in self._active if item[0] is not token]
                 if len(self.spans) < 128 and not self._finished:
                     self.spans.append({'stage': name, 'operation': operation, 'status': 'error' if outcome['status'] == 'error' else 'ok',
                         'start_ms': round(max(0, start - self.origin) * 1000, 3),

@@ -57,7 +57,7 @@ class OpenRouterVoice:
                              headers=self._headers(), timeout=35, max_bytes=128 * 1024)
         return transcript_text(response)
 
-    def synthesize(self, text, destination):
+    def speech_body(self, text):
         body = {"model": self.settings.tts_model, "input": text, "response_format": "mp3"}
         if self.settings.voice_reference:
             path = Path(self.settings.voice_reference).expanduser()
@@ -71,12 +71,50 @@ class OpenRouterVoice:
             body["voice"] = self.settings.tts_voice
         else:
             raise ServiceError("Выберите JARVIS_VOICE_REFERENCE или JARVIS_TTS_VOICE; голос кино пока не подключён")
+        return body
+
+    def stream(self, text):
+        yield from stream_audio('https://openrouter.ai/api/v1/audio/speech',
+                                data=json.dumps(self.speech_body(text),ensure_ascii=False).encode('utf-8'),
+                                headers={**self._headers(),'Content-Type':'application/json','Accept':'audio/mpeg'})
+
+    def synthesize(self, text, destination):
+        body = self.speech_body(text)
         raw = self.audio_transport("https://openrouter.ai/api/v1/audio/speech",
                                    data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
                                    headers={**self._headers(), "Content-Type": "application/json", "Accept": "audio/mpeg"})
         if len(raw) < 100 or raw.lstrip().startswith((b"{", b"<")):
             raise ServiceError("OpenRouter не вернул звуковой файл")
         destination.write_bytes(raw)
+
+
+def stream_audio(url, *, data, headers, timeout=15, max_bytes=12*1024*1024):
+    """Read available chunks, not an entire requested buffer. Never retry."""
+    request=urllib.request.Request(url,data=data,headers=headers)
+    total=0
+    try:
+        with urllib.request.urlopen(request,timeout=timeout) as response:
+            content_type=response.headers.get('Content-Type','').split(';')[0].lower()
+            if content_type not in {'audio/mpeg','audio/mp3','application/octet-stream'}:
+                raise ServiceError('Голосовой сервис вернул неподдерживаемый формат потока')
+            while True:
+                raw=response.read1(4096) if hasattr(response,'read1') else response.read(4096)
+                if not raw:
+                    break
+                if total==0:
+                    if raw.lstrip().startswith((b'{',b'<')):
+                        raise ServiceError('Голосовой сервис вернул данные вместо аудио')
+                    mark('tts_first_byte')
+                total+=len(raw)
+                if total>max_bytes:
+                    raise ServiceError('Голосовой поток превысил лимит')
+                yield raw
+            if total<100:
+                raise ServiceError('Голосовой поток пуст или повреждён')
+    except urllib.error.HTTPError as exc:
+        raise ServiceError(f'Голосовой сервис: HTTP {exc.code}') from exc
+    except (urllib.error.URLError,TimeoutError,OSError) as exc:
+        raise ServiceError('Голосовой поток недоступен. Повтор не выполнялся.') from exc
 
 
 def request_audio(url, *, data, headers, timeout=35, max_bytes=12 * 1024 * 1024):

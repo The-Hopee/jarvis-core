@@ -1,5 +1,30 @@
 # Validation
 
+## Version 0.6 — incremental voice and ASR comparison
+
+2026-11-05: **111 Python tests pass**, **9 native scenarios pass**, 0.6.0
+EXE/DLL rebuilt. Real MP3 packets are decoded/resampled before HTTP completion;
+unit tests encode actual MP3/ID3 input and exercise split packets, partial
+failure without replay, cancellation, SSE completion markers, tool-argument
+buffering and concurrent span bookkeeping. Legacy nonstreaming tests remain.
+
+32 identical synthetic files: Scribe p50/p95 1.186/1.654 s, normalized WER
+1.39%; Whisper Turbo 2.524/8.134 s, WER 4.86%; local Vosk 0.575/0.712 s,
+WER 6.25%. No failed calls. Scribe remains primary; Vosk is a local fallback.
+This comparison is not a benchmark of live-user microphone accuracy.
+
+Two live voice streams yielded first PCM at 2.532/1.948 s and completed network
+decoding at 3.189/3.307 s, without playing audio. Real SSE+TTS passed two
+simulated-output turns. A real-time replay of the system-status command reached
+virtual PCM output at 4.540 s after estimated speech end, with no LLM calls.
+One short physical PCM output completed with the selected voice reference A.
+That physical probe had a 5.322 s cloud first-byte wait, so no general 2–5 s
+promise is made. Playback markers are dispatch timings, not acoustic readings.
+
+Aggregate: [stage06-2026-11-05.json](benchmarks/stage06-2026-11-05.json).
+Usage and limitations: [UPGRADE_06.md](UPGRADE_06.md). Other account/coding/pilot
+acceptance items remain open. No private messages were read or sent here.
+
 ## Version 0.5 — timings and cached progress
 
 2026-11-05: full Python suite: **100 tests pass**, native contract: **9 scenarios

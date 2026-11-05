@@ -233,7 +233,7 @@ class CloudVoiceTests(unittest.TestCase):
             wav.write_bytes(b'RIFF'+b'\x00'*100)
             manifest=root/'samples.json'
             manifest.write_text(json.dumps({'samples':{'К вашим услугам, сэр.':'clip.wav'}},ensure_ascii=False),encoding='utf-8')
-            speaker=Speaker(Settings(tts='openrouter',voice_samples=str(manifest)))
+            speaker=Speaker(Settings(tts='openrouter',voice_samples=str(manifest),tts_streaming=False))
             with patch('winsound.PlaySound') as play, patch('jarvis.cloud_voice.OpenRouterVoice.synthesize') as synth, patch('jarvis.speech.play_mp3'):
                 speaker.speak('К ВАШИМ УСЛУГАМ, СЭР!')
                 self.assertEqual(play.call_count,1)
@@ -253,7 +253,7 @@ class CloudVoiceTests(unittest.TestCase):
                 play.assert_not_called()
 
     def test_tts_recovers_after_cooldown_without_replaying_the_failed_request(self):
-        speaker = Speaker(Settings(tts='openrouter', local_speaker='eugene'))
+        speaker = Speaker(Settings(tts='openrouter', local_speaker='eugene',tts_streaming=False))
         with patch('jarvis.cloud_voice.OpenRouterVoice.synthesize', side_effect=[ServiceError('offline'), None]) as synth, \
              patch('jarvis.tts_local.LocalVoice') as local, patch('winsound.PlaySound'), \
              patch('jarvis.speech.play_mp3') as play:
