@@ -377,3 +377,8 @@ The next CI build and all 154 Python tests passed. Native document validation
 then exposed a test-only short-path alias assumption (`RUNNER~1` versus
 `runneradmin`). The test now compares actual file identity with `samefile`,
 retains its root/type checks, and always stops its own test child in `finally`.
+
+The following independent run passed both suites, packaging, and every frozen
+runtime check, but its report write failed because the fresh account had no
+`Jarvis/benchmarks` directory. The developer smoke script now creates that output
+directory before writing. This changes the report exporter, not the shipped EXE.

@@ -35,6 +35,7 @@ def main():
         public['runtime']=result['runtime'];public['doctor_passed']=True;public['control_passed']=True
         public['ui']=result['ui']
         public['privacy']=result['privacy']
+        (USER_DIR/'benchmarks').mkdir(parents=True,exist_ok=True)
         (USER_DIR/'benchmarks/stage11-package-smoke.json').write_text(json.dumps(public,indent=2),encoding='utf-8')
         print(json.dumps(public,indent=2))
 
