@@ -49,6 +49,21 @@ class Settings:
     telegram_path: str = ""
     telegram_api_id: int | None = None
     telegram_api_hash: str = field(default="", repr=False)
+    asr: str = "vosk"
+    asr_model: str = "elevenlabs/scribe-v2"
+    tts_model: str = "fish-audio/s2.1-pro"
+    tts_voice: str = ""
+    voice_reference: str = ""
+    voice_reference_text: str = ""
+    voice_samples: str = ""
+    elevenlabs_api_key: str = field(default="", repr=False)
+    elevenlabs_voice_id: str = ""
+    elevenlabs_tts_model: str = "eleven_multilingual_v2"
+    elevenlabs_asr_model: str = "scribe_v2"
+    conversation_seconds: int = 40
+    document_roots: tuple[Path, ...] = (Path.home() / "Documents",)
+    vscode_path: str = ""
+    onlyoffice_path: str = ""
     model_path: Path = ROOT / "models" / "vosk-model-small-ru-0.22"
 
     @property
@@ -69,8 +84,18 @@ class Settings:
         if microphone and microphone.isdecimal():
             microphone = int(microphone)
         tts = values.get("JARVIS_TTS", "edge").strip()
-        if tts not in {"silero", "edge", "windows", "off"}:
-            raise ValueError("JARVIS_TTS: silero, edge, windows или off")
+        if tts not in {"silero", "edge", "windows", "elevenlabs", "openrouter", "off"}:
+            raise ValueError("JARVIS_TTS: silero, edge, windows, elevenlabs, openrouter или off")
+        asr = values.get("JARVIS_ASR", "vosk").strip()
+        if asr not in {"vosk", "elevenlabs", "openrouter"}:
+            raise ValueError("JARVIS_ASR: vosk, elevenlabs или openrouter")
+        conversation_seconds = int(values.get("JARVIS_CONVERSATION_SECONDS", "40"))
+        if not 0 <= conversation_seconds <= 180:
+            raise ValueError("JARVIS_CONVERSATION_SECONDS: от 0 до 180")
+        document_roots = tuple(Path(p.strip()).expanduser().resolve() for p in
+                               values.get("JARVIS_DOCUMENT_ROOTS", str(Path.home() / "Documents")).split(";") if p.strip())
+        if not document_roots or len(document_roots) > 10 or any(str(p).startswith("\\\\") for p in document_roots):
+            raise ValueError("JARVIS_DOCUMENT_ROOTS: от 1 до 10 локальных каталогов через ;")
         local_speaker = values.get("JARVIS_LOCAL_SPEAKER", "aidar").strip()
         if local_speaker not in {"aidar", "eugene"}:
             raise ValueError("JARVIS_LOCAL_SPEAKER: aidar или eugene")
@@ -96,4 +121,17 @@ class Settings:
                    microphone=microphone, telegram_path=values.get("JARVIS_TELEGRAM_PATH", "").strip(),
                    telegram_api_id=int(values["TELEGRAM_API_ID"]) if values.get("TELEGRAM_API_ID", "").strip() else None,
                    telegram_api_hash=values.get("TELEGRAM_API_HASH", "").strip(),
+                   asr=asr, elevenlabs_api_key=values.get("ELEVENLABS_API_KEY", "").strip(),
+                   asr_model=values.get("JARVIS_ASR_MODEL", "elevenlabs/scribe-v2").strip(),
+                   tts_model=values.get("JARVIS_TTS_MODEL", "fish-audio/s2.1-pro").strip(),
+                   tts_voice=values.get("JARVIS_TTS_VOICE", "").strip(),
+                   voice_reference=values.get("JARVIS_VOICE_REFERENCE", "").strip(),
+                   voice_reference_text=values.get("JARVIS_VOICE_REFERENCE_TEXT", "").strip(),
+                   voice_samples=values.get("JARVIS_VOICE_SAMPLES", "").strip(),
+                   elevenlabs_voice_id=values.get("ELEVENLABS_VOICE_ID", "").strip(),
+                   elevenlabs_tts_model=values.get("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2").strip(),
+                   elevenlabs_asr_model=values.get("ELEVENLABS_ASR_MODEL", "scribe_v2").strip(),
+                   conversation_seconds=conversation_seconds, document_roots=document_roots,
+                   vscode_path=values.get("JARVIS_VSCODE_PATH", "").strip(),
+                   onlyoffice_path=values.get("JARVIS_ONLYOFFICE_PATH", "").strip(),
                    model_path=Path(values.get("JARVIS_VOSK_MODEL", str(root / "models/vosk-model-small-ru-0.22"))))

@@ -129,7 +129,7 @@ class AssistantTests(unittest.TestCase):
         client = OpenRouterClient('fake-key-for-test', 'test-model', http)
         self.assertEqual(client.complete([{'role': 'user', 'content': 'Привет'}], self.registry.definitions())['content'], 'Привет')
         self.assertEqual(captured['headers']['Authorization'], 'Bearer fake-key-for-test')
-        self.assertFalse(captured['data']['parallel_tool_calls'])
+        self.assertNotIn('parallel_tool_calls', captured['data'])
         self.assertTrue(captured['data']['tools'])
         self.assertNotIn('fake-key-for-test', repr(Settings(api_key='fake-key-for-test')))
 

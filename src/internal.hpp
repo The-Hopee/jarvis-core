@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 namespace jarvis {
 struct Failure : std::runtime_error {
@@ -49,5 +50,6 @@ private:
     bool enabled_ = false;
     std::map<std::string, Application> apps_;
     std::map<DWORD, Handle> children_;
+    std::vector<std::filesystem::path> document_roots_;
 };
 }

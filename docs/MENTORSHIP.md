@@ -21,4 +21,9 @@ implementation as homework or treat assisted code as independent ML experience.
 
 Stage 2 implements the Python controller, persistent IPC, OpenRouter tool calling,
 Russian speech input/output, browser/Telegram commands, weather and places tools.
-Live OpenRouter inference awaits the API key the user will add to local .env.
+Live OpenRouter inference was initially deferred; version 0.4 now validates real
+chat/tool calls with a separate inference key. See VALIDATION.md for current limits.
+
+Latest user requirements and the next-session handoff are recorded in
+[NEXT_SESSION.md](NEXT_SESSION.md). These supersede earlier choices of voice,
+learning-by-Jarvis assignments and feature priorities.

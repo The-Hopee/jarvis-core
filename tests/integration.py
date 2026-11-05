@@ -49,11 +49,13 @@ class ContractTests(unittest.TestCase):
             self.assertTrue(all(t['enabled']==t['read_only'] for t in capabilities['tools']))
             self.assertEqual(s.call('launch_app',app_id='notepad')['error']['code'],'actions_disabled')
             self.assertEqual(s.call('open_url',url='https://example.com')['error']['code'],'actions_disabled')
+            self.assertEqual(s.call('minimize_all')['error']['code'],'actions_disabled')
             self.assertTrue(s.call('list_apps')['ok'])
             self.assertEqual(s.call('get_location',timeout_seconds=100)['error']['code'],'invalid_argument')
 
     def test_browser_rejects_non_web_inputs_without_opening(self):
         with Session('--enable-actions') as s:
+            self.assertEqual(s.call('minimize_all',unexpected=True)['error']['code'],'invalid_argument')
             for url in ['file:///C:/Windows/notepad.exe','cmd.exe','javascript:alert(1)',
                         'https://user:password@example.com/','https://example.com/\ncmd.exe',
                         'https://example.com/"bad','https://example.com/\\bad','https://']:
@@ -123,6 +125,26 @@ class ContractTests(unittest.TestCase):
                 finally:
                     # Cleanup is confined to the test child PID created above.
                     s.call('stop_app',pid=pid)
+
+    def test_document_opening_is_limited_to_docx_roots_and_registered_onlyoffice(self):
+        with tempfile.TemporaryDirectory(prefix='jarvis-docs-') as tmp:
+            root=Path(tmp)/'documents'; root.mkdir()
+            document=root/'Документ с пробелами.docx'; document.write_bytes(b'fixture')
+            outside=Path(tmp)/'outside.docx'; outside.write_bytes(b'fixture')
+            executable=root/'command.exe'; executable.write_bytes(b'fixture')
+            config=Path(tmp)/'config.json'
+            config.write_text(json.dumps({'enable_actions':True,'document_roots':[str(root)],
+                'applications':{'onlyoffice':{'path':str(Path(ARGS.child).resolve()),'hidden':True}}}),encoding='utf-8')
+            with Session('--config',str(config)) as s:
+                for path in [str(outside),str(executable),'relative.docx',str(root/'missing.docx')]:
+                    response=s.call('open_document',path=path)
+                    self.assertFalse(response['ok'],response)
+                response=s.call('open_document',path=str(document),args=['anything'])
+                self.assertFalse(response['ok'])
+                launched=s.call('open_document',path=str(document)); self.assertTrue(launched['ok'],launched)
+                self.assertEqual(launched['result']['app_id'],'onlyoffice')
+                self.assertEqual(Path(launched['result']['path']),document)
+                s.call('stop_app',pid=launched['result']['pid'])
 
     def test_dll_ownership_and_repeated_calls(self):
         dll=ctypes.CDLL(ARGS.dll)

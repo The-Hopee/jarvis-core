@@ -1,5 +1,60 @@
 # Validation
 
+## Version 0.4 update
+
+2026-11-05: 63 Python tests and nine native contract scenarios pass; Release
+EXE/DLL rebuilt locally. Earlier sections below describe historical snapshots.
+
+- Live OpenRouter chat and tool use now work. The previous local key was a
+  management/provisioning key. A separate inference key with a $5 total limit
+  and no periodic reset was created; the original local configuration is backed
+  up outside Git. No key values or private account IDs are published.
+- Strict routing previously returned 404 because parallel_tool_calls=false
+  excluded the current GPT-4.1-mini providers. Omitting this optional parameter
+  restores the route; bounded serial execution remains in the controller.
+- Real model calls launched the installed VS Code, continued discussion after
+  the user's second turn without another launch, created a DOCX, and filled a
+  template with synthetic name/city values. Native window enumeration confirmed
+  the resulting document title in an actual ONLYOFFICE window. The initial
+  semantic-field mismatch found during the live check was fixed and covered by
+  a regression test; the repeated template filling succeeded.
+- Document tests exercise split formatting runs, repeated placeholders, table
+  and header text, content controls, preserved source hashes, namespace retention,
+  all-or-nothing missing-field validation, insertion treated as literal text,
+  no overwrites, bounded paths/packages and failed opening after a saved result.
+- Native DOCX tests use a dedicated executable fixture, and check directory and
+  extension boundaries before launching. Real minimize-all/volume mutations
+  were not invoked by tests against the user's desktop.
+- Conversation/audio tests cover follow-up expiry/sleep, ambiguity continuation,
+  safe pronoun resolution, stable cached video ordering, dialogue memory after
+  errors, immediate app launch, current-request desktop-action grants, WAV payloads,
+  microphone closure before cloud use, ignored idle speech, punctuation retention,
+  reference-conditioned TTS payloads and secret-free single-attempt errors.
+- OpenRouter Scribe v2 actually transcribed an existing synthetic speech sample
+  in about 1.6 seconds. It also transcribed/diarized a user-supplied public TikTok
+  source. The 18.6 s assistant-only reference and transcript remain outside Git.
+  Fish Audio s2.1-pro generated a nonempty MP3 from that reference, playback
+  completed, and an independent ASR request recovered the generated Russian text.
+  The user found its naturalness/background unsatisfactory; that reference was
+  replaced. VSThemes blocked automatic download with HTTP 429, then the user
+  supplied the downloaded archive locally. It contains 61 WAVs. Audio members
+  were streamed with size/CRC checks into numbered local files; PDF/URL entries
+  were not extracted or executed. Musical greetings were excluded from references.
+  A 15.0 s dialogue reference and a 19.0 s narration reference produced two TTS
+  previews. Both were played twice; the user selected A (dialogue). The running
+  assistant now uses that reference with Fish Audio s2.1-pro through OpenRouter.
+  Twelve exact response clips are configured locally, including the wake response;
+  an actual CLI speech check played the original response from that manifest.
+  Full-response matching, rejection of path escape, and avoiding a wrong clip
+  for a longer response are covered by two additional tests.
+  OpenRouter Scribe ASR is enabled.
+  Cloud TTS resumes on a later turn after its one-minute error cooldown.
+- Telegram/VK login remains explicitly deferred. No real private messages were
+  read/sent. Coding-agent jobs with actual cloud models were not run in this update.
+
+CLI: `--doctor`, `--speak`, `--voice-previews`, `manage.cmd foreground`.
+See [UPGRADE_04.md](UPGRADE_04.md) for configuration and manual verification.
+
 ## Version 0.3 update
 
 2026-11-04: 39 Python tests and eight native contract scenarios pass.

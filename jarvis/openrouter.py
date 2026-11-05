@@ -9,8 +9,12 @@ class OpenRouterClient:
     def complete(self, messages: list, tools: list, *, allow_tools=True):
         if not self._api_key:
             raise ServiceError("Добавьте OPENROUTER_API_KEY в .env")
+        # Some providers (including the current GPT-4.1-mini route) do not
+        # advertise parallel_tool_calls. With require_parameters=True, sending
+        # even false excludes every endpoint and returns HTTP 404. Execution is
+        # serialized and bounded by Assistant, so omit this optional parameter.
         body = {"model": self.model, "messages": messages, "tools": tools,
-                "tool_choice": "auto" if allow_tools else "none", "parallel_tool_calls": False,
+                "tool_choice": "auto" if allow_tools else "none",
                 "max_tokens": self.max_tokens, "provider": {"require_parameters": True}}
         if not tools:
             for key in ("tools", "tool_choice", "parallel_tool_calls"):

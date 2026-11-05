@@ -92,19 +92,27 @@ def parse_videos(html, limit=5):
 class YouTube:
     def __init__(self, kernel, fetch=fetch_html):
         self.kernel, self.fetch = kernel, fetch
+        self.last_results = None
 
     def search(self, query, limit=5):
         url = 'https://www.youtube.com/results?' + urlencode({'search_query': query, 'hl': 'ru'})
         videos = parse_videos(self.fetch(url), limit)
         if not videos:
             raise ServiceError('YouTube не вернул подходящих видео. Уточните исполнителя или название.')
-        return {'query': query, 'videos': videos, 'search_url': url}
+        self.last_results = {'query': query, 'videos': videos, 'search_url': url}
+        return self.last_results
 
     def open_video(self, query, index=1):
-        results = self.search(query, limit=max(index, 5))
+        self.search(query, limit=max(index, 5))
+        return self.open_result(index)
+
+    def open_result(self, index=1):
+        results = self.last_results
+        if not results:
+            raise ServiceError('Сначала попроси найти видео; предыдущих результатов пока нет')
         if index > len(results['videos']):
             raise ServiceError('В результатах нет видео с таким номером')
         video = results['videos'][index - 1]
         launched = self.kernel.call('open_url', {'url': video['url']})['result']
-        return {**video, 'query': query, 'selection': 'search_result', 'result_index': index,
+        return {**video, 'query': results['query'], 'selection': 'search_result', 'result_index': index,
                 'status': launched['status'], 'page_loaded_verified': False}

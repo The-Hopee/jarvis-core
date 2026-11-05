@@ -7,6 +7,42 @@ import subprocess
 from .config import USER_DIR
 
 
+def discover_application(app_id, override=""):
+    """Only known installed executables, never free-form command discovery."""
+    if override:
+        path = Path(override)
+        if not path.is_file() or path.suffix.lower() != ".exe":
+            raise ValueError(f"Некорректный путь приложения {app_id}")
+        return path.resolve()
+    relative = {"vscode": "Programs/Microsoft VS Code/Code.exe",
+                "onlyoffice": "ONLYOFFICE/DesktopEditors/DesktopEditors.exe"}[app_id]
+    # Prefer a running instance: accounts migrated from a Cyrillic profile may
+    # still run the old installation while a separate update is pending.
+    process_name = "Code" if app_id == "vscode" else "DesktopEditors"
+    command = f"[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); @(Get-Process -Name {process_name} -ErrorAction SilentlyContinue | ForEach-Object {{$_.Path}} | Select-Object -Unique) | ConvertTo-Json -Compress"
+    try:
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                                capture_output=True, encoding="utf-8", timeout=8,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        paths = json.loads(result.stdout.lstrip("\ufeff")) if result.stdout.strip() else []
+        for item in paths if isinstance(paths, list) else [paths]:
+            if item and Path(item).is_file() and Path(item).name.lower() == (process_name + ".exe").lower():
+                return Path(item).resolve()
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    for variable in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(variable)
+        if not base:
+            continue
+        candidates = [Path(base) / relative]
+        if app_id == "vscode":
+            candidates.append(Path(base) / "Microsoft VS Code/Code.exe")
+        for path in candidates:
+            if path.is_file():
+                return path.resolve()
+    return None
+
+
 def discover_telegram(settings):
     candidates = []
     if settings.telegram_path:
@@ -53,6 +89,13 @@ def ensure_native_config(settings, path=None):
         telegram = discover_telegram(settings)
         if telegram:
             config["applications"]["telegram"] = {"path": str(telegram), "args": [], "hidden": False}
+    for app_id, override in (("vscode", settings.vscode_path), ("onlyoffice", settings.onlyoffice_path)):
+        current = config["applications"].get(app_id, {}).get("path")
+        if override or not current or not Path(current).is_file():
+            executable = discover_application(app_id, override)
+            if executable:
+                config["applications"][app_id] = {"path": str(executable), "args": [], "hidden": False}
+    config["document_roots"] = [str(p) for p in settings.document_roots]
     config["enable_actions"] = True
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

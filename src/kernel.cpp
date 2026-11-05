@@ -35,6 +35,9 @@ Json capabilities(bool enable_actions) {
         object({{"username",{{"type","string"},{"maxLength",32}}},{"phone",{{"type","string"},{"maxLength",15}}}}));
     add("launch_app","Launch an application registered by the local configuration",false,
         object({{"app_id",{{"type","string"},{"minLength",1}}}},Json::array({"app_id"})));
+    add("open_document","Open an existing DOCX inside configured document_roots with registered ONLYOFFICE",false,
+        object({{"path",{{"type","string"},{"minLength",1},{"maxLength",4096}}}},Json::array({"path"})));
+    add("minimize_all","Request minimizing visible application windows without closing them",false,empty);
     add("stop_app","Terminate only a child launched by this kernel instance",false,
         object({{"pid",{{"type","integer"},{"minimum",1},{"maximum",4294967295ULL}}}},Json::array({"pid"})));
     add("focus_window","Request foreground activation of an enumerated window",false,
@@ -69,7 +72,7 @@ Json Kernel::execute(const std::string& input) {
         else if (method=="system_snapshot") result=collect_snapshot(params);
         else if (method=="list_processes") { keys(params,{"top_n"}); result=probes::CollectProcessMetrics(integer(params,"top_n",10,1,100)); }
         else if (method=="get_location") result=windows_location(params);
-        else if (method=="list_windows"||method=="get_audio"||method=="list_apps"||method=="open_url"||method=="open_telegram_dialog"||method=="launch_app"||method=="stop_app"||method=="focus_window"||method=="set_volume"||method=="set_mute")
+        else if (method=="list_windows"||method=="get_audio"||method=="list_apps"||method=="open_url"||method=="open_telegram_dialog"||method=="launch_app"||method=="open_document"||method=="minimize_all"||method=="stop_app"||method=="focus_window"||method=="set_volume"||method=="set_mute")
             result=impl_->actions.invoke(method,params);
         else throw Failure("method_not_found","Unknown method: "+method);
     } catch (const Json::parse_error&) { error={{"code","parse_error"},{"message","Request must contain valid UTF-8 JSON"}}; }

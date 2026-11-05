@@ -17,3 +17,10 @@ __pycache__/
 *.session
 *.session-journal
 /playwright/.auth/
+/voice-references/
+/voice-previews/
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.ogg

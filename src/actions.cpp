@@ -89,7 +89,17 @@ struct Audio {
 }
 
 Actions::Actions(const Json& config) {
-    keys(config,{"enable_actions","applications"});
+    keys(config,{"enable_actions","applications","document_roots"});
+    if (config.contains("document_roots")) {
+        const auto& roots=config["document_roots"];
+        if (!roots.is_array()||roots.empty()||roots.size()>10) throw Failure("invalid_argument","document_roots must contain 1..10 local directories");
+        for (const auto& root:roots) {
+            if (!root.is_string()) throw Failure("invalid_argument","Document root must be a string");
+            const auto path=std::filesystem::path(wide(root.get<std::string>()));
+            if (!path.is_absolute()||path.wstring().rfind(L"\\\\",0)==0) throw Failure("invalid_argument","Document root must be an absolute local path");
+            document_roots_.push_back(std::filesystem::weakly_canonical(path));
+        }
+    }
     if (config.contains("enable_actions")) {
         if (!config["enable_actions"].is_boolean()) throw Failure("invalid_argument","enable_actions must be boolean");
         enabled_=config["enable_actions"].get<bool>();
@@ -142,8 +152,36 @@ Json Actions::invoke(const std::string& method,const Json& params) {
     if (!enabled_) throw Failure("actions_disabled","Start the kernel with enable_actions=true to execute registered actions");
     if (method=="open_url") return open_web_url(params);
     if (method=="open_telegram_dialog") return jarvis::open_telegram_dialog(params);
-    if (method=="launch_app") {
-        keys(params,{"app_id"}); const auto id=string_value(params,"app_id");
+    if (method=="minimize_all") {
+        keys(params,{});
+        int requested=0;
+        for (const auto& window:windows()) {
+            const auto handle=reinterpret_cast<HWND>(static_cast<std::uintptr_t>(std::stoull(window["window_id"].get<std::string>(),nullptr,16)));
+            if (handle==GetShellWindow()||handle==GetDesktopWindow()||IsIconic(handle)) continue;
+            if (ShowWindowAsync(handle,SW_MINIMIZE)) ++requested;
+        }
+        return {{"status","minimize_requested"},{"windows_requested",requested},{"all_windows_minimized_verified",false}};
+    }
+    if (method=="launch_app"||method=="open_document") {
+        std::wstring document;
+        std::string id;
+        if (method=="open_document") {
+            keys(params,{"path"});
+            const auto path=std::filesystem::path(wide(string_value(params,"path")));
+            if (!path.is_absolute()||path.wstring().rfind(L"\\\\",0)==0||!std::filesystem::is_regular_file(path))
+                throw Failure("invalid_argument","Document must be an existing absolute local file");
+            const auto canonical=std::filesystem::canonical(path);
+            auto extension=canonical.extension().wstring();
+            std::transform(extension.begin(),extension.end(),extension.begin(),[](wchar_t c){return static_cast<wchar_t>(towlower(c));});
+            if (extension!=L".docx") throw Failure("invalid_argument","Only DOCX documents are supported");
+            bool allowed=false;
+            for (const auto& root:document_roots_) {
+                const auto relative=canonical.lexically_relative(root);
+                if (!relative.empty()&&!relative.is_absolute()&&*relative.begin()!=L"..") { allowed=true; break; }
+            }
+            if (!allowed) throw Failure("document_path_denied","Document is outside configured document_roots");
+            document=canonical.wstring(); id="onlyoffice";
+        } else { keys(params,{"app_id"}); id=string_value(params,"app_id"); }
         const auto it=apps_.find(id); if (it==apps_.end()) throw Failure("app_not_registered","Unknown application ID: "+id);
         for (auto child=children_.begin();child!=children_.end();) {
             if (WaitForSingleObject(child->second.get(),0)==WAIT_OBJECT_0) child=children_.erase(child); else ++child;
@@ -155,6 +193,7 @@ Json Actions::invoke(const std::string& method,const Json& params) {
         std::transform(extension.begin(),extension.end(),extension.begin(),[](wchar_t c){return static_cast<wchar_t>(towlower(c));});
         if (extension!=L".exe") throw Failure("invalid_argument","Only registered .exe applications can be launched");
         std::wstring command=quote(app.path); for (const auto& arg:app.args) command+=L" "+quote(arg);
+        if (!document.empty()) command+=L" "+quote(document);
         if (command.size()>=32767) throw Failure("invalid_argument","Windows command line too long");
         STARTUPINFOW si{}; si.cb=sizeof(si); si.dwFlags=STARTF_USESHOWWINDOW; si.wShowWindow=app.hidden?SW_HIDE:SW_SHOWNORMAL;
         PROCESS_INFORMATION pi{}; const auto cwd=std::filesystem::path(app.path).parent_path().wstring();
@@ -162,7 +201,9 @@ Json Actions::invoke(const std::string& method,const Json& params) {
             throw Failure("launch_failed","CreateProcessW failed",GetLastError());
         Handle thread(pi.hThread); Handle process(pi.hProcess);
         children_.insert_or_assign(pi.dwProcessId,std::move(process));
-        return {{"app_id",id},{"pid",pi.dwProcessId},{"status","process_created"},{"application_ready_verified",false}};
+        Json result={{"app_id",id},{"pid",pi.dwProcessId},{"status","process_created"},{"application_ready_verified",false}};
+        if (!document.empty()) result["path"]=utf8(document);
+        return result;
     }
     if (method=="stop_app") {
         keys(params,{"pid"}); const DWORD pid=process_id(params); const auto it=children_.find(pid);

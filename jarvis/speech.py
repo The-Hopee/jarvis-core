@@ -6,9 +6,14 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 from .config import ROOT
+
+
+def speech_key(text):
+    return " ".join(re.findall(r"\w+", text.casefold().replace("ё", "е")))
 
 
 def spoken_text(text):
@@ -63,6 +68,40 @@ class Speaker:
         self.settings, self.muted = settings, muted
         self.edge_healthy = True
         self.local_voice = None
+        self.cloud_retry_at = 0
+        self.recordings = None
+
+    def _play_recording(self, text):
+        if not self.settings.voice_samples:
+            return False
+        try:
+            manifest = Path(self.settings.voice_samples).expanduser().resolve()
+            if self.recordings is None:
+                if manifest.stat().st_size > 256 * 1024:
+                    raise ValueError("Слишком большой список реплик")
+                data = json.loads(manifest.read_text(encoding="utf-8-sig"))["samples"]
+                if not isinstance(data, dict) or len(data) > 200:
+                    raise ValueError("Некорректный список реплик")
+                self.recordings = {speech_key(key): value for key, value in data.items()
+                                   if isinstance(key, str) and isinstance(value, str)}
+            relative = self.recordings.get(speech_key(text))
+            if relative is None:
+                return False
+            path = (manifest.parent / relative).resolve()
+            if not path.is_relative_to(manifest.parent) or not path.is_file() or path.stat().st_size > 5 * 1024 * 1024:
+                raise ValueError("Аудиореплика вне каталога или превышает лимит")
+            if path.suffix.lower() == ".wav":
+                import winsound
+                winsound.PlaySound(str(path), winsound.SND_FILENAME)
+            elif path.suffix.lower() == ".mp3":
+                play_mp3(path)
+            else:
+                raise ValueError("Нужен WAV или MP3")
+            return True
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+            self.recordings = {}
+            print("[Голос] Записанная реплика недоступна; использую синтез речи.", file=sys.stderr)
+            return False
 
     def speak(self, text):
         if self.muted or self.settings.tts == "off":
@@ -70,7 +109,21 @@ class Speaker:
         text = spoken_text(text)
         if not text:
             return
-        if self.settings.tts == "silero":
+        if self._play_recording(text):
+            return
+        if self.settings.tts in {"elevenlabs", "openrouter"} and time.monotonic() >= self.cloud_retry_at:
+            try:
+                from .cloud_voice import CloudVoice, OpenRouterVoice
+                with tempfile.TemporaryDirectory(prefix="jarvis-cloud-voice-") as directory:
+                    path = Path(directory) / "speech.mp3"
+                    provider = OpenRouterVoice if self.settings.tts == "openrouter" else CloudVoice
+                    provider(self.settings).synthesize(text, path)
+                    play_mp3(path)
+                return
+            except (RuntimeError, OSError):
+                self.cloud_retry_at = time.monotonic() + 60
+                print("[Голос] Выбранный облачный голос недоступен; использую локальный мужской голос. Проверьте настройки ключа и выбранного голоса.", file=sys.stderr)
+        if self.settings.tts in {"silero", "elevenlabs", "openrouter"}:
             try:
                 from .tts_local import LocalVoice
                 import winsound
@@ -106,6 +159,12 @@ def voice_previews(settings):
     directory.mkdir(parents=True, exist_ok=True)
     text = "Системы в норме. Я на связи. Готов приступить к выполнению вашей задачи."
     results = []
+    if settings.tts in {"elevenlabs", "openrouter"}:
+        from .cloud_voice import CloudVoice, OpenRouterVoice
+        path = directory / "selected-cloud-voice.mp3"
+        provider = OpenRouterVoice if settings.tts == "openrouter" else CloudVoice
+        provider(settings).synthesize(text, path)
+        return [{"backend": settings.tts, "path": str(path)}]
     if settings.tts == "silero":
         from .tts_local import LocalVoice
         for speaker in ("aidar", "eugene"):

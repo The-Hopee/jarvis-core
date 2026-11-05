@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import queue
 import re
+import sys
 import time
 import urllib.request
 import zipfile
@@ -54,6 +55,16 @@ class WakeGate:
         self.followup_seconds = followup_seconds
         self.until = 0
 
+    def resume(self, seconds=None, now=None):
+        now = time.monotonic() if now is None else now
+        self.until = now + (self.followup_seconds if seconds is None else seconds)
+
+    def sleep(self):
+        self.until = 0
+
+    def active(self, now=None):
+        return self.until > (time.monotonic() if now is None else now)
+
     def accept(self, text, now=None):
         now = time.monotonic() if now is None else now
         match = WAKE.search(text)
@@ -84,6 +95,34 @@ class VoiceInput:
         self.sample_rate = int(info["default_samplerate"])
         self.gate = WakeGate()
         self.messages = deque(maxlen=5)
+        self.settings = settings
+        self.cloud_retry_at = 0
+
+    def after_response(self):
+        # The timer starts after model/TTS latency, giving the user the full
+        # configured window. No microphone is open while the assistant speaks.
+        self.gate.resume(self.settings.conversation_seconds)
+
+    def sleep(self):
+        self.gate.sleep()
+
+    def _refine(self, command, pcm):
+        if not command or self.settings.asr == "vosk" or time.monotonic() < self.cloud_retry_at:
+            return command
+        try:
+            from .cloud_voice import CloudVoice, OpenRouterVoice
+            provider = OpenRouterVoice if self.settings.asr == "openrouter" else CloudVoice
+            transcript = provider(self.settings).transcribe(pcm, self.sample_rate)
+            match = WAKE.match(transcript.lstrip())
+            if match:
+                transcript = transcript.lstrip()[match.end():].lstrip(" ,.!?:—-").strip()
+            if not transcript:
+                return ""  # An empty cloud transcription must not execute a command.
+            return transcript
+        except RuntimeError as exc:
+            self.cloud_retry_at = time.monotonic() + 60
+            print("[Распознавание] " + str(exc) + " Использую локальное распознавание.", file=sys.stderr, flush=True)
+            return command
 
     def next_command(self, stop_requested=None):
         import sounddevice as sd
@@ -92,6 +131,10 @@ class VoiceInput:
         errors = queue.Queue(maxsize=4)
         recognizer = vosk.KaldiRecognizer(self.model, self.sample_rate)
         stop_requested = stop_requested or (lambda: False)
+        # Keep at most 45 s of the current utterance, never idle room audio on disk.
+        chunks = deque()
+        buffered = 0
+        selected = None
 
         def callback(data, frames, timing, status):
             if status:
@@ -116,11 +159,23 @@ class VoiceInput:
                     if not errors.empty():
                         raise RuntimeError("Ошибка микрофона: " + errors.get())
                     continue
+                chunks.append(chunk)
+                buffered += len(chunk)
+                while buffered > self.sample_rate * 2 * 45 and chunks:
+                    buffered -= len(chunks.popleft())
                 if recognizer.AcceptWaveform(chunk):
                     text = json.loads(recognizer.Result()).get("text", "")
                     if not text:
+                        chunks.clear()
+                        buffered = 0
                         continue
                     self.messages.append(text)
                     command = self.gate.accept(text)
                     if command is not None:
-                        return command
+                        selected = command, b"".join(chunks)
+                        break
+                    chunks.clear()
+                    buffered = 0
+        if stop_requested():
+            return None
+        return self._refine(*selected) if selected is not None else None

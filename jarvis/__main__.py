@@ -107,6 +107,13 @@ def main():
                                   "model": settings.model, "tts": settings.tts, "voice": settings.voice,
                                   "voice_preset": settings.voice_preset,
                                   "local_speaker": settings.local_speaker,
+                                  "asr": settings.asr, "conversation_seconds": settings.conversation_seconds,
+                                  "asr_model": settings.asr_model, "tts_model": settings.tts_model,
+                                  "voice_reference_present": bool(settings.voice_reference),
+                                  "voice_samples_configured": bool(settings.voice_samples),
+                                  "elevenlabs_key_present": bool(settings.elevenlabs_api_key),
+                                  "cloud_voice_selected": bool(settings.elevenlabs_voice_id),
+                                  "document_roots": [str(p) for p in settings.document_roots],
                                   "telegram_api_configured": bool(settings.telegram_api_id and settings.telegram_api_hash),
                                   "vosk_model_installed": (settings.model_path / "am/final.mdl").is_file(),
                                   "location_mode": "coordinates" if settings.latitude is not None else "city" if settings.city else "Windows then approximate IP",
@@ -140,18 +147,24 @@ def main():
                 voice = VoiceInput(settings)
                 print("Голосовой режим: скажите «Джарвис, состояние машины». Выход: «Джарвис, выход» или Ctrl+C.", flush=True)
                 while not runtime.stopped():
-                    print("[Микрофон] Слушаю обращение «Джарвис»…", flush=True)
+                    print("[Микрофон] Можно продолжать без имени…" if voice.gate.active() else "[Микрофон] Слушаю обращение «Джарвис»…", flush=True)
                     text = voice.next_command(stop_requested=runtime.stopped)
                     if text is None:
                         break
-                    if text.casefold() in {"выход", "завершить работу", "до свидания"}:
+                    if text.casefold().strip(" .!?,") in {"выход", "завершить работу", "до свидания"}:
                         speaker.speak("До связи.")
                         break
+                    if text.casefold().strip(" .!?,") in {"спасибо хватит", "хватит", "тихий режим", "пока", "отбой", "спящий режим"}:
+                        voice.sleep()
+                        speaker.speak("Хорошо. Позови, когда понадоблюсь.")
+                        assistant.reset_conversation()
+                        continue
                     print("Ты: " + (text or "Джарвис"), flush=True)
                     turn = assistant.respond(text)
                     display(turn)
                     if not runtime.stopped():
                         speaker.speak(turn.text)
+                        voice.after_response()
         return 0
     except AlreadyRunning as exc:
         print(str(exc))
