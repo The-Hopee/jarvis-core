@@ -37,6 +37,13 @@ class Settings:
     master_model: str = ""
     worker_model: str = ""
     review_model: str = ""
+    document_model: str = 'openai/gpt-6.1-terra'
+    coding_model: str = 'openai/gpt-6-sol'
+    document_effort: str = 'low'
+    coding_effort: str = 'high'
+    light_budget: float = .10
+    document_budget: float = .30
+    coding_budget: float = 1.0
     tts: str = "edge"
     voice: str = "ru-RU-DmitryNeural"
     voice_preset: str = "deep"
@@ -79,6 +86,18 @@ class Settings:
     def load(cls, root: Path = ROOT):
         values = {**read_env(USER_DIR / "settings.env"), **read_env(root / ".env"), **os.environ}
         latitude = values.get("JARVIS_LATITUDE", "").strip()
+        profile_values={
+            'document_model':values.get('JARVIS_DOCUMENT_MODEL','openai/gpt-6.1-terra').strip(),
+            'coding_model':values.get('JARVIS_CODING_MODEL','openai/gpt-6-sol').strip(),
+            'document_effort':values.get('JARVIS_DOCUMENT_EFFORT','low').strip(),
+            'coding_effort':values.get('JARVIS_CODING_EFFORT','high').strip(),
+        }
+        for name,default in [('light_budget',.10),('document_budget',.30),('coding_budget',1.0)]:
+            value=float(values.get('JARVIS_'+name.upper()+'_USD',str(default)))
+            if not math.isfinite(value) or not .01<=value<=5:raise ValueError('Лимит профиля: 0.01–5 USD')
+            profile_values[name]=value
+        if any(profile_values[n] not in {'none','low','medium','high','xhigh','max'} for n in ('coding_effort','document_effort')):
+            raise ValueError('Неизвестный уровень reasoning effort')
         longitude = values.get("JARVIS_LONGITUDE", "").strip()
         if bool(latitude) != bool(longitude):
             raise ValueError("Укажите обе координаты JARVIS_LATITUDE и JARVIS_LONGITUDE")
@@ -120,7 +139,7 @@ class Settings:
             raise ValueError("JARVIS_TTS_RATE: от -30% до +30%")
         if not re.fullmatch(r"[+-]\d{1,2}Hz", pitch) or not -50 <= int(pitch[:-2]) <= 50:
             raise ValueError("JARVIS_TTS_PITCH: от -50Hz до +50Hz")
-        return cls(root=root, api_key=values.get("OPENROUTER_API_KEY", "").strip(),
+        return cls(root=root, api_key=values.get("OPENROUTER_API_KEY", "").strip(),**profile_values,
                    model=values.get("OPENROUTER_MODEL", "").strip() or "openai/gpt-4.1-mini",
                    master_model=values.get("JARVIS_MASTER_MODEL", "").strip(),
                    worker_model=values.get("JARVIS_WORKER_MODEL", "").strip(),

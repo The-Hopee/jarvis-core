@@ -52,8 +52,9 @@ class HomeJobs:
         registry=ToolRegistry(kernel,LocalServices(self.settings,kernel),shared_vk=self.vk,resource_locks=RESOURCES,cancelled=cancelled)
         registry.home_jobs=self
         client=OpenRouterClient(self.settings.api_key,self.settings.model) if self.settings.api_key else None
-        assistant=Assistant(registry,client,stopped=cancelled)
         payload=job['payload']
+        from .routing import Router
+        assistant=Assistant(registry,client,stopped=cancelled,router=Router(self.settings,mode=payload.get('mode','auto')))
         assistant.history=copy.deepcopy(payload.get('history',[]))[-20:]
         assistant.conversation.context=copy.deepcopy(payload.get('context',{}))
         # Ambiguous-recipient send grants stay with the foreground conversation.
@@ -83,7 +84,8 @@ class HomeJobs:
     def submit(self,text,assistant):
         assistant.conversation.expire()
         job=self.store.submit('chat',{'text':text,'history':assistant.history[-20:],
-                                      'context':assistant.conversation.context})
+                                      'context':assistant.conversation.context,
+                                      'mode':assistant.router.mode if assistant.router else 'auto'})
         assistant.history=[*assistant.history,{'role':'user','content':text},{'role':'assistant','content':f"Задача {job['number']} принята в очередь."}][-20:]
         return job
 

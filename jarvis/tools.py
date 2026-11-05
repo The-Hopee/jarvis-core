@@ -73,6 +73,7 @@ class ToolRegistry:
         self.resource_locks=resource_locks or RESOURCES
         self.cancelled=cancelled or (lambda:False)
         self.home_jobs=None
+        self.active_tools=None
         self.chat_model = OpenRouterClient(settings.api_key, settings.model, max_tokens=1200) if settings.api_key else None
         from .documents import Documents
         self.documents = Documents(settings, kernel)
@@ -233,7 +234,8 @@ class ToolRegistry:
                 for t in self.tools.values() if (self.can_send or t.name not in {'send_message', 'reply_in_my_style'})
                 and (self.can_code or t.name != 'start_coding_task')
                 and (self.can_change_desktop or t.name not in {'minimize_windows', 'set_volume', 'adjust_volume', 'mute_audio'})
-                and (getattr(self, 'can_write_document', False) or t.name not in {'create_document', 'fill_document'})]
+                and (getattr(self, 'can_write_document', False) or t.name not in {'create_document', 'fill_document'})
+                and (self.active_tools is None or t.name in self.active_tools)]
 
     def execute(self, name, arguments):
         from .telemetry import measure

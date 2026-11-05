@@ -1,19 +1,29 @@
 from .http import ServiceError, request_json
 from .telemetry import measure
+from contextlib import nullcontext
 
 
 class OpenRouterClient:
-    def __init__(self, api_key: str, model: str, http=request_json, max_tokens=600):
+    def __init__(self, api_key: str, model: str, http=request_json, max_tokens=600, budget=None, effort=''):
         self._api_key, self.model, self.http = api_key, model, http
         self.max_tokens = max_tokens
+        self.budget,self.effort=budget,effort
+        self.last_usage={}
 
     def stream_complete(self,messages,tools,*,allow_tools=False,on_text=None):
         from .text_stream import events,completion
         if allow_tools or tools:
             raise ServiceError('Голосовой поток разрешён только для ответа без инструментов')
-        body={'model':self.model,'messages':messages,'max_tokens':self.max_tokens,'stream':True}
-        with measure('model',self.model):
-            return completion(events(body,{'Authorization':'Bearer '+self._api_key,'X-Title':'Jarvis Home'}),on_text)
+        body={'model':self.model,'messages':messages,'max_tokens':self.max_tokens,'stream':True,'stream_options':{'include_usage':True}}
+        with self.budget.call(body,self.model,self.max_tokens) if self.budget else nullcontext({}) as usage:
+            def chunks():
+                for chunk in events(body,{'Authorization':'Bearer '+self._api_key,'X-Title':'Jarvis Home'}):
+                    if isinstance(chunk.get('usage'),dict):usage.update(chunk['usage'])
+                    yield chunk
+            with measure('model',self.model):
+                result=completion(chunks(),on_text)
+            self.last_usage=usage.copy()
+            return result
 
     def complete(self, messages: list, tools: list, *, allow_tools=True):
         if not self._api_key:
@@ -28,10 +38,14 @@ class OpenRouterClient:
         if not tools:
             for key in ("tools", "tool_choice", "parallel_tool_calls"):
                 body.pop(key, None)
-        with measure('model', self.model):
-            response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,
+        if self.effort:body['reasoning']={'effort':self.effort}
+        with self.budget.call(body,self.model,self.max_tokens) if self.budget else nullcontext({}) as usage:
+            with measure('model', self.model):
+                response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,
                                  headers={"Authorization": "Bearer " + self._api_key, "X-Title": "Jarvis Home"},
                                  timeout=45)
+            if isinstance(response,dict) and isinstance(response.get('usage'),dict):usage.update(response['usage'])
+            self.last_usage=usage.copy()
         if not isinstance(response, dict) or response.get("error"):
             raise ServiceError("OpenRouter вернул ошибку. Проверьте модель, баланс и поддержку tools.")
         try:

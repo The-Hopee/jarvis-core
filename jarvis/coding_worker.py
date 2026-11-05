@@ -75,7 +75,7 @@ def run_worker(spec, client):
             break
         if step == 9 or len(calls) > 5:
             raise ServiceError('Субагент превысил лимит вызовов')
-        messages.append({'role': 'assistant', **{key: message[key] for key in ('content', 'tool_calls', 'reasoning_details', 'reasoning') if key in message}})
+        messages.append({'role': 'assistant', **{key: message[key] for key in ('content', 'tool_calls', 'reasoning_details', 'reasoning','_response_items') if key in message}})
         for call in calls:
             check_parent(spec)
             function = call.get('function', {})
@@ -129,7 +129,10 @@ def main():
     try:
         spec = json.loads(path.read_text(encoding='utf-8'))
         settings = Settings.load()
-        client = OpenRouterClient(settings.api_key, settings.worker_model or settings.model, max_tokens=2200)
+        from .routing import make_client
+        from .budget import Budget
+        budget=Budget(spec.get('budget_id'),settings.coding_budget)
+        client = make_client(settings.api_key, settings.worker_model or settings.coding_model,effort=settings.coding_effort,max_tokens=8000,budget=budget)
         atomic_json(result_path, run_worker(spec, client))
         return 0
     except Exception as exc:

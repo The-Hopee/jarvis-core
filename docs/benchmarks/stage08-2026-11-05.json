@@ -1,0 +1,55 @@
+{
+  "responses-smoke": [
+    {
+      "model": "openai/gpt-6-sol",
+      "effort": "high",
+      "function_call_validated": true,
+      "final_nonempty": true,
+      "raw_response_items_preserved": true,
+      "usage_keys": [
+        "cost",
+        "cost_details",
+        "input_tokens",
+        "input_tokens_details",
+        "is_byok",
+        "output_tokens",
+        "output_tokens_details",
+        "total_tokens"
+      ]
+    },
+    {
+      "model": "openai/gpt-6.1-terra",
+      "effort": "low",
+      "function_call_validated": true,
+      "final_nonempty": true,
+      "raw_response_items_preserved": true,
+      "usage_keys": [
+        "cost",
+        "cost_details",
+        "input_tokens",
+        "input_tokens_details",
+        "is_byok",
+        "output_tokens",
+        "output_tokens_details",
+        "total_tokens"
+      ]
+    }
+  ],
+  "routing-smoke": {
+    "profile": "documents",
+    "model": "openai/gpt-6.1-terra",
+    "tools": [
+      {
+        "name": "create_document",
+        "ok": true
+      }
+    ],
+    "document_exists": true,
+    "warning": false,
+    "budget": {
+      "limit_usd": 0.3,
+      "accounted_usd": 0.0026648,
+      "reserved_usd": 0.0
+    }
+  }
+}

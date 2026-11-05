@@ -340,3 +340,7 @@ application UIs is outside this stage's verification.
 
 The checks above describe the original stage 1 snapshot. See stage 2 for the
 current Python/OpenRouter/speech implementation and its validation limits.
+
+## 2026-11-05 — 0.8 profiles and skills
+
+128 Python tests and the native contract suite pass. Real OpenRouter Responses tool/result round trips completed for GPT-6 Sol high and GPT-6.1 Terra low. Terra created a real DOCX using create_document, with no application launch or audio; cost $0.0026648. Routing, manual modes, opaque reasoning replay, incomplete response rejection and concurrent budget reservations are tested. ASR/TTS charges are outside the LLM budget; provider key cap is unchanged.

@@ -180,7 +180,8 @@ class Orchestrator:
 
     def spawn_worker(self, task, workspace):
         spec = workspace.parent / (task['id'] + '.json')
-        atomic_json(spec, {'task': task, 'workspace': str(workspace), 'checks': self.config.get('checks', []),'parent_pid':os.getpid()})
+        atomic_json(spec, {'task': task, 'workspace': str(workspace), 'checks': self.config.get('checks', []),'parent_pid':os.getpid(),
+                          'budget_id':getattr(getattr(self.planner,'budget',None),'ident',None)})
         log_path = workspace.parent / (task['id'] + '.log')
         with log_path.open('wb') as log:
             process = subprocess.Popen([sys.executable.replace('pythonw.exe', 'python.exe'), '-m', 'jarvis.coding_worker', str(spec)],
@@ -271,10 +272,13 @@ def run_job(job_id,cancelled=None):
     atomic_json(directory / 'status.json', state)
     try:
         settings = Settings.load()
-        master = OpenRouterClient(settings.api_key, settings.master_model or settings.model, max_tokens=2500)
-        reviewer = OpenRouterClient(settings.api_key, settings.review_model or settings.model, max_tokens=2500)
+        from .routing import make_client
+        from .budget import Budget
+        budget=Budget(job_id,settings.coding_budget)
+        master = make_client(settings.api_key, settings.master_model or settings.coding_model,effort=settings.coding_effort,max_tokens=8000,budget=budget)
+        reviewer = make_client(settings.api_key, settings.review_model or settings.coding_model,effort=settings.coding_effort,max_tokens=8000,budget=budget)
         result = Orchestrator(project_config(request['project_id']), request['goal'], directory, master, reviewer,cancelled=cancelled).run()
-        atomic_json(directory / 'status.json', {**state, **result})
+        atomic_json(directory / 'status.json', {**state, **result,'budget':budget.snapshot()})
         return 0
     except Exception as exc:
         atomic_json(directory / 'status.json', {**state, 'status': 'failed', 'error': str(exc)[:2000]})

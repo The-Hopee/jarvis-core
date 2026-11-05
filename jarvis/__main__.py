@@ -155,7 +155,8 @@ def main():
             registry = ToolRegistry(tools_kernel, services,cancelled=runtime.stopped if runtime else None)
             resources.callback(registry.close)
             client = OpenRouterClient(settings.api_key, settings.model) if settings.api_key else None
-            assistant = Assistant(registry, client,stopped=runtime.stopped if runtime else None)
+            from .routing import Router
+            assistant = Assistant(registry, client,stopped=runtime.stopped if runtime else None,router=Router(settings))
             if not settings.api_key:
                 print("[Настройка] Ключ OpenRouter пока не задан: работают базовые локальные команды. Добавьте OPENROUTER_API_KEY в .env для свободного диалога.", file=sys.stderr)
             if arguments.once is not None:
