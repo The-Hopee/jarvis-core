@@ -362,3 +362,13 @@ GPT-6 Sol high completed a source demo with two workers, checks and independent 
 Limits: this is the same Windows installation with isolated data, not a clean VM or the uncle PC. Actual logon autostart, uncle hardware/pilot, selected ordinary VK recipients and live Telegram remain external acceptance checks. The artifact remains a prerelease; no stable 1.0 is claimed.
 
 Privacy update requested by the owner: local dictation, no chat context to cloud AI. 154 tests include private direct/background/error/status paths, freeform dictation, credentials, explicit project selection, private TTS, ASR rejection, redirect/origin restrictions, UTF-8 browser-worker IPC and a real Chromium canary fetch blocked before transport. The offline privacy-check command uses synthetic accounts and fake transports. A real own VK note through the protected browser/IPC path reached zero cloud model calls and was absent from subsequent model history. Public Sol/Terra tool rounds and a light-model greeting work with ZDR/data_collection=deny. Six logical coding tasks are executed in bounded two-worker waves in the Git integration test. This module is not an OS firewall/sandbox; untrusted code still requires separate isolation.
+
+## Build compatibility follow-up after the RC tag
+
+The first independent Windows CI build selected MSVC 14.51 and failed with STL1011:
+the SDK's C++/WinRT headers selected deprecated experimental coroutines in C++17.
+Main now builds as C++20, using standard coroutine support, consistent with
+[Microsoft's C++/WinRT update](https://github.com/microsoft/cppwinrt/discussions/1580).
+The local MSVC 19.44 rebuild and all nine native contract scenarios pass.
+The published RC ZIP remains the original verified MSVC 19.44 build and its SHA256;
+this build configuration follow-up does not replace any published asset.

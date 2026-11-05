@@ -243,6 +243,7 @@ Python запускает один дочерний процесс C++ и общ
 Windows x64, Visual Studio 2022 with Desktop development with C++, Windows SDK,
 CMake 3.24+, Git. Python 3.10+ is used for native integration tests/examples, which
 do not require extra Python packages. The voice assistant uses requirements.lock.txt.
+CMake selects C++20 so C++/WinRT uses standard coroutine headers on current MSVC.
 Initial CMake configuration downloads nlohmann/json at a
 pinned commit (v3.11.3).
 

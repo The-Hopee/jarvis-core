@@ -6,7 +6,9 @@ endif()
 if(NOT WIN32)
     message(FATAL_ERROR "Jarvis Core requires Windows and the Windows SDK")
 endif()
-set(CMAKE_CXX_STANDARD 17)
+# C++/WinRT uses standard coroutines; current MSVC rejects the C++17
+# experimental coroutine headers included by the Windows SDK.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
