@@ -372,3 +372,8 @@ Main now builds as C++20, using standard coroutine support, consistent with
 The local MSVC 19.44 rebuild and all nine native contract scenarios pass.
 The published RC ZIP remains the original verified MSVC 19.44 build and its SHA256;
 this build configuration follow-up does not replace any published asset.
+
+The next CI build and all 154 Python tests passed. Native document validation
+then exposed a test-only short-path alias assumption (`RUNNER~1` versus
+`runneradmin`). The test now compares actual file identity with `samefile`,
+retains its root/type checks, and always stops its own test child in `finally`.

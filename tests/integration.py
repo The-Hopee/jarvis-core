@@ -142,9 +142,11 @@ class ContractTests(unittest.TestCase):
                 response=s.call('open_document',path=str(document),args=['anything'])
                 self.assertFalse(response['ok'])
                 launched=s.call('open_document',path=str(document)); self.assertTrue(launched['ok'],launched)
-                self.assertEqual(launched['result']['app_id'],'onlyoffice')
-                self.assertEqual(Path(launched['result']['path']),document)
-                s.call('stop_app',pid=launched['result']['pid'])
+                try:
+                    self.assertEqual(launched['result']['app_id'],'onlyoffice')
+                    self.assertTrue(Path(launched['result']['path']).samefile(document))
+                finally:
+                    s.call('stop_app',pid=launched['result']['pid'])
 
     def test_dll_ownership_and_repeated_calls(self):
         dll=ctypes.CDLL(ARGS.dll)
