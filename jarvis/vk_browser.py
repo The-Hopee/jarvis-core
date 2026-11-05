@@ -4,12 +4,9 @@ import sys
 from .config import ROOT, USER_DIR
 from .ipc import JsonProcessClient, KernelError
 from .http import ServiceError
+from .vk_navigation import VKLoginRequired, confirm_login, navigate
 
 PROFILE = USER_DIR / 'vk-browser'
-
-
-class VKLoginRequired(ServiceError):
-    code = 'vk_login_required'
 
 
 class VKBrowser:
@@ -59,17 +56,27 @@ class VKBrowser:
 
 
 def login():
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, Error as BrowserError
     PROFILE.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        context = playwright.chromium.launch_persistent_context(str(PROFILE), headless=False, locale='ru-RU')
+        try:
+            context = playwright.chromium.launch_persistent_context(str(PROFILE), headless=False, locale='ru-RU')
+        except BrowserError as exc:
+            raise ServiceError('Не удалось открыть профиль VK. Остановите Джарвиса через manage.cmd stop и закройте его окно подключения VK, затем повторите --vk-login.') from exc
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto('https://vk.com/im', wait_until='domcontentloaded', timeout=30000)
+            status = navigate(page, '/im', 'messenger', timeout=25, allow_login=True)
+            if status == 'authenticated':
+                print('Сохранённый вход в VK подтверждён. Повторная авторизация не нужна.')
+                return
             print('Войдите в VK в открывшемся окне. Пароль вводите только на странице VK.')
-            input('Когда список диалогов станет доступен, нажмите Enter здесь: ')
-            from .vk_worker import VKPage
-            VKPage(page).ensure_messenger()
+            input('Дождитесь появления своей страницы VK, сообщений или музыки после входа и нажмите Enter здесь: ')
+            confirm_login(context)
             print('Браузерный профиль сохранён локально. Сообщения при подключении не отправлялись.')
+        except BrowserError as exc:
+            raise ServiceError('Не удалось завершить проверку VK. Профиль сохранён; повторите --vk-login после загрузки страницы.') from exc
         finally:
-            context.close()
+            try:
+                context.close()
+            except BrowserError:
+                pass

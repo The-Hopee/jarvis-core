@@ -10,14 +10,15 @@ import time
 from urllib.parse import urlencode, urlsplit
 
 from .http import ServiceError
-from .vk_browser import VKLoginRequired
+from .vk_navigation import VKLoginRequired, navigate
 
-ROWS = '.audio_row, [data-testid="audio-row"], [data-testid="track-row"], [data-test-id="track-row"]'
-TITLES = ['.audio_row__title_inner', '.audio_row__title', '[data-testid="track-title"]', '[data-testid="audio-title"]', '[class*="AudioRow_title"]']
-ARTISTS = ['.audio_row__performers', '.audio_row__performer', '[data-testid="track-artist"]', '[data-testid="audio-artist"]', '[class*="AudioRow_artist"]']
-PLAY = ['.audio_row__play_btn', '.audio_row__play', '[data-testid="track-play"]', '[data-testid="audio-play"]',
+ROWS = '.audio_row, [data-testid="MusicTrackRow"], [data-testid="audio-row"], [data-testid="track-row"], [data-test-id="track-row"]'
+TITLES = ['[data-testid="MusicTrackRow_Title"]', '.audio_row__title_inner', '.audio_row__title', '[data-testid="track-title"]', '[data-testid="audio-title"]', '[class*="AudioRow_title"]']
+ARTISTS = ['[data-testid="MusicTrackRow_Authors"]', '.audio_row__performers', '.audio_row__performer', '[data-testid="track-artist"]', '[data-testid="audio-artist"]', '[class*="AudioRow_artist"]']
+PLAY = ['[data-testid="audiorow-tappable"][role="button"]', '.audio_row__play_btn', '.audio_row__play', '[data-testid="track-play"]', '[data-testid="audio-play"]',
         'button[aria-label*="Воспроизвести"]', 'button[aria-label*="Слушать"]', 'button[aria-label="Play"]']
-PAUSE = ['[data-testid="track-pause"]', 'button[aria-label="Пауза"]', 'button[aria-label="Pause"]']
+PAUSE = ['[data-testid="audiorow-tappable"][aria-label*="Пауза"]', '[data-testid="audiorow-tappable"][aria-label*="Приостанов"]',
+         '[data-testid="track-pause"]', 'button[aria-label="Пауза"]', 'button[aria-label="Pause"]']
 ACTIVE = '.audio_row__playing, .audio_row_playing, .audio_row--playing, [data-playing="true"], [aria-current="true"]'
 DOM_FIELDS = {'titles': TITLES, 'artists': ARTISTS, 'buttons': PLAY + PAUSE, 'active': ACTIVE, 'pause': PAUSE}
 
@@ -78,10 +79,7 @@ class VKMusicPage:
         page.evaluate(TRACK_AUDIO)
 
     def ensure_music(self):
-        url = urlsplit(self.page.url)
-        if not (url.scheme == 'https' and (url.hostname in {'music.vk.com', 'music.vk.ru'} or
-                url.hostname in {'vk.com', 'vk.ru', 'www.vk.com', 'www.vk.ru'} and url.path.startswith('/audio'))):
-            self.page.goto('https://vk.com/audio', wait_until='domcontentloaded', timeout=20000)
+        navigate(self.page, '/audio', 'music', timeout=20)
         self.require_login()
 
     def require_login(self):
@@ -93,7 +91,7 @@ class VKMusicPage:
                 'button[data-testid="login-button"]', '.VkIdForm', '#index_login']):
             raise VKLoginRequired('Нужен вход в VK в профиле Джарвиса: python -m jarvis --vk-login')
 
-    def tracks(self):
+    def tracks(self, search_only=False):
         # One DOM snapshot, rather than thousands of IPC calls on long lists.
         rows = self.page.locator(ROWS).evaluate_all("""(rows, fields) => {
           const visible = el => !!el && !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
@@ -102,15 +100,21 @@ class VKMusicPage:
             return null;
           };
           const text = el => el ? el.innerText.replace(/\\s+/g, ' ').trim().slice(0, 200) : '';
-          return rows.slice(0, 150).map((row, index) => {
-            if (!visible(row) || row.dataset.ad === 'true' || row.dataset.sponsored === 'true' || !first(row, fields.buttons)) return null;
+          const search = fields.searchOnly ? document.querySelector('[data-testid="AudioCatalog_SectionAllTracks"]') : null;
+          if (fields.searchOnly && document.querySelector('[data-testid="search_audio_input"]') && !search) return [];
+          const result = [];
+          for (let index=0; index<rows.length && result.length<150; index++) {
+            const row = rows[index];
+            if (search && !search.contains(row)) continue;
+            if (!visible(row) || row.dataset.ad === 'true' || row.dataset.sponsored === 'true' || !first(row, fields.buttons)) continue;
             const title = text(first(row, fields.titles));
-            if (!title) return null;
-            return {title, artist:text(first(row, fields.artists)),
+            if (!title) continue;
+            result.push({title, artist:text(first(row, fields.artists)),
               identity:row.getAttribute('data-full-id') || row.getAttribute('data-track-id') || '', _row:index,
-              _playing:row.matches(fields.active) || fields.pause.some(s => !!row.querySelector(s))};
-          }).filter(Boolean);
-        }""", DOM_FIELDS)
+              _playing:row.matches(fields.active) || fields.pause.some(s => !!row.querySelector(s))});
+          }
+          return result;
+        }""", {**DOM_FIELDS, 'searchOnly': search_only})
         result, seen = [], set()
         for row in rows:
             title, artist, identity = row['title'], row['artist'], row.pop('identity')
@@ -144,19 +148,18 @@ class VKMusicPage:
         if not 1 <= len(query) <= 200 or not 1 <= limit <= 5:
             raise ServiceError('Укажите название/исполнителя до 200 символов и limit от 1 до 5')
         self.ensure_music()
-        previous = [(t['id'], t['title'], t['artist']) for t in self.tracks()]
+        previous = [(t['id'], t['title'], t['artist']) for t in self.tracks(search_only=True)]
         old_query = self.query
         self.results, self.query = [], query
-        search = visible(self.page, ['#audio_search input', 'input#audio_search', '.audio_page__search input',
+        search = visible(self.page, ['[data-testid="search_audio_input"]', '#audio_search input', 'input#audio_search', '.audio_page__search input',
             'input[placeholder*="музык"]', 'input[placeholder*="аудиозапис"]', 'input[placeholder*="трек"]',
-            'input[placeholder*="Music"]', 'input[placeholder="Поиск"]', '[role="searchbox"]'])
+            'input[placeholder*="Music"]', 'input[placeholder="Поиск"]:not([data-testid="search_top_input"])', '[role="searchbox"]:not([data-testid="search_top_input"])'])
         if search is not None:
             search.fill(query)
             search.press('Enter')
         else:
             # A fixed VK route with encoded data, never a model-provided URL.
-            self.page.goto('https://vk.com/audio?' + urlencode({'act': 'search', 'q': query}),
-                           wait_until='domcontentloaded', timeout=20000)
+            navigate(self.page, '/audio?' + urlencode({'act': 'search', 'q': query}), 'music', timeout=20, force=True)
             previous = []
         deadline = time.monotonic() + self.timeout
         # Require a settled result change, the same query, or genuinely matching
@@ -164,7 +167,7 @@ class VKMusicPage:
         settled, signature = 0, None
         while time.monotonic() < deadline:
             self.require_login()
-            found = self.tracks()
+            found = self.tracks(search_only=True)
             current = [(t['id'], t['title'], t['artist']) for t in found]
             matching = any(all(word in key(t['title'] + ' ' + t['artist']) for word in key(query).split()) for t in found)
             if current == previous and old_query != query and matching:
@@ -199,8 +202,11 @@ class VKMusicPage:
         if expected['_row'] >= rows.count():
             raise ServiceError('Результаты VK изменились. Попросите найти трек заново.')
         row = rows.nth(expected['_row'])
-        actual = next((t for t in self.tracks() if t['_row'] == expected['_row']), None)
-        if actual is None or any(actual[k] != expected[k] for k in ('id', 'title', 'artist')):
+        title, artist = label(row, TITLES), label(row, ARTISTS)
+        identity = row.get_attribute('data-full-id') or row.get_attribute('data-track-id') or ''
+        if not re.fullmatch(r'[\w:-]{1,100}', identity, re.ASCII):
+            identity = 'text-' + hashlib.sha256((title + '\0' + artist).encode()).hexdigest()[:20]
+        if not row.is_visible() or (identity, title, artist) != (expected['id'], expected['title'], expected['artist']):
             raise ServiceError('Порядок результатов VK изменился; другой трек не запускался. Повторите поиск.')
         return row
 

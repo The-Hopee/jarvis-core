@@ -8,7 +8,7 @@ import time
 
 from .http import ServiceError
 from .messaging import MessageLedger, choose_recipient, normalized, name_key
-from .vk_browser import VKLoginRequired
+from .vk_navigation import navigate
 
 
 class VKPage:
@@ -25,17 +25,13 @@ class VKPage:
         return None
 
     def ensure_messenger(self):
-        if not re.match(r'https://(?:[^/]+\.)?vk\.(?:com|ru)/(?:im|mail)', self.page.url):
-            self.page.goto('https://vk.com/im', wait_until='domcontentloaded', timeout=25000)
-        if not re.match(r'https://(?:[^/]+\.)?vk\.(?:com|ru)/(?:im|mail)', self.page.url) or self.first_visible([
-            'input[type="password"]', 'input[name="login"]', 'input[name="phone"]']):
-            raise VKLoginRequired('Нужен вход в VK. Выполните python -m jarvis --vk-login')
+        navigate(self.page, '/im', 'messenger', timeout=20)
 
     def open_dialog(self, recipient):
         self.ensure_messenger()
-        search = self.first_visible(['#im_dialogs_search', '.im-dialogs-search input',
+        search = self.first_visible(['[data-testid="me_convo_list"] input[type="search"]', '.ConvoList__search input', '#im_dialogs_search', '.im-dialogs-search input',
             'input[placeholder*="диалог"]', 'input[placeholder*="Диалог"]',
-            'input[placeholder="Поиск"]', 'input[placeholder="Search"]', '[role="searchbox"]'])
+            'input[placeholder="Поиск"]:not([data-testid="search_top_input"])', 'input[placeholder="Search"]', '[role="searchbox"]:not([data-testid="search_top_input"])'])
         if search is None:
             raise ServiceError('Не найден поиск диалогов VK. Откройте список сообщений в профиле Джарвиса.')
         search.fill(name_key(recipient))

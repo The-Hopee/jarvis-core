@@ -1,5 +1,35 @@
 # Validation
 
+## VK login redirect fix
+
+2026-11-05: all 84 Python tests pass. The user completed VK login, but pressing
+Enter triggered another vk.com/im navigation during a vk.ru callback, causing
+an uncaught Playwright interruption error.
+
+- Login confirmation now observes the completed account UI across browser tabs;
+  it does not force messenger navigation after Enter. Current VK profile-menu
+  and messenger-list markers are recognized, and a URL alone is not treated as
+  successful authentication.
+- Shared bounded navigation lets existing callbacks settle and waits for the
+  redirected destination after an interrupted goto. Network/profile/window errors
+  are reported as service errors with a preserved profile rather than a traceback.
+- Seven new Chromium regression scenarios cover the exact redirect shape,
+  interrupted navigation without replay, already-running callbacks, login in
+  another tab, incomplete login, network failure and trusted URL/UI boundaries.
+- The real saved profile is authenticated. The fixed --vk-login command exited
+  successfully with "Сохранённый вход в VK подтверждён"; no password was entered
+  by the assistant, and credentials/cookie values/private chat text were not read.
+- Current VK music uses MusicTrackRow and search_audio_input rather than the
+  old audio_row layout. The adapter now reads those controls and limits searches
+  to AudioCatalog_SectionAllTracks, excluding personal-library/recommendation rows.
+  A new Chromium fixture includes both header and music search plus an unrelated
+  recommendation; it verifies the correct field, result and playback/pause/resume.
+- A real authenticated search through browser IPC for the specified artist now
+  returns tracks by that artist. Actual account audio playback and private-message
+  sending were not performed in this fix. Messenger search is scoped away from
+  the global header search; remaining authenticated conversation selectors still
+  require a selected-dialog validation when requested by the user.
+
 ## VK music update
 
 2026-11-05: all 76 Python tests pass, including 13 new music/browser cases.

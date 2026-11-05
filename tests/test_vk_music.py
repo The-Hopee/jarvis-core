@@ -1,6 +1,7 @@
 """Actual Chromium audio, browser-session isolation and spoken music routing."""
 import io
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -71,6 +72,19 @@ document.querySelector('#search').addEventListener('keydown',e=>{
 
 DIALOG = '''<input id="im_dialogs_search"><a href="/im?sel=42" onclick="event.preventDefault();history.replaceState({},'',this.href);document.querySelector('.im-page--title-main').textContent='Петя'">
 <span class="im-dialog--name">Петя</span></a><div class="im-page--title-main"></div>'''
+
+MODERN = '''<input data-testid="search_top_input" placeholder="Поиск" id="global-search">
+<input data-testid="search_audio_input" placeholder="Поиск музыки" id="music-search">
+<section data-testid="AudioCatalog_SectionMyTracks"><div data-testid="MusicTrackRow"><div data-testid="audiorow-tappable" role="button" onclick="document.body.dataset.wrongTrack='true'">
+<div data-testid="MusicTrackRow_Title">Посторонняя рекомендация</div><div data-testid="MusicTrackRow_Authors">Другой исполнитель</div></div></div></section>
+<section data-testid="AudioCatalog_SectionAllTracks"><div data-testid="MusicTrackRow"><div id="target-play" data-testid="audiorow-tappable" role="button" tabindex="0" aria-label="Воспроизвести" onclick="player.play()">
+<div data-testid="MusicTrackRow_PlaybackControls">▶</div>
+<div data-testid="MusicTrackRow_Title">Альфа</div><div data-testid="MusicTrackRow_Authors">Исполнитель</div></div></div></section>
+<script>window.player=new Audio('/test-modern.wav');
+player.addEventListener('playing',()=>document.querySelector('#target-play').setAttribute('aria-label','Пауза'));
+player.addEventListener('pause',()=>document.querySelector('#target-play').setAttribute('aria-label','Воспроизвести'));
+document.querySelector('#music-search').onkeydown=e=>{if(e.key==='Enter')document.body.dataset.musicQuery=e.target.value};
+document.querySelector('#global-search').onkeydown=()=>document.body.dataset.wrongSearch='true';</script>'''
 
 
 def audio_bytes():
@@ -153,7 +167,7 @@ class BrowserMusicTests(unittest.TestCase):
         self.browser=self.playwright.chromium.launch(headless=True)
         self.addCleanup(self.browser.close)
         self.context=self.browser.new_context()
-        self.context.route('https://vk.com/**',self.route)
+        self.context.route(re.compile(r'https://vk\.(?:com|ru)/'),self.route)
         self.page=self.context.new_page()
         self.page.goto('https://vk.com/audio')
         self.music=VKMusicPage(self.page,timeout=1.2)
@@ -162,7 +176,19 @@ class BrowserMusicTests(unittest.TestCase):
         if '/test-' in route.request.url:
             route.fulfill(content_type='audio/wav',body=audio_bytes())
         else:
-            route.fulfill(content_type='text/html; charset=utf-8',body=DIALOG if '/im' in route.request.url else HTML)
+            route.fulfill(content_type='text/html; charset=utf-8',body=MODERN if 'modern=1' in route.request.url else DIALOG if '/im' in route.request.url else HTML)
+
+    def test_current_vk_widgets_use_music_search_instead_of_header_search(self):
+        self.page.goto('https://vk.com/audio?modern=1')
+        music=VKMusicPage(self.page,timeout=1.2)
+        found=music.search('Исполнитель')
+        self.assertEqual(found['tracks'][0]['title'],'Альфа')
+        self.assertEqual(self.page.locator('#global-search').input_value(),'')
+        self.assertEqual(self.page.locator('body').get_attribute('data-music-query'),'Исполнитель')
+        self.assertTrue(music.play_result(1)['playback_verified'])
+        self.assertIsNone(self.page.locator('body').get_attribute('data-wrong-track'))
+        self.assertTrue(music.control('pause')['pause_verified'])
+        self.assertTrue(music.control('resume')['playback_verified'])
 
     def test_real_detached_audio_search_play_pause_resume_next_and_previous(self):
         found=self.music.search('Исполнитель')
