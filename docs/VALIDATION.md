@@ -382,3 +382,14 @@ The following independent run passed both suites, packaging, and every frozen
 runtime check, but its report write failed because the fresh account had no
 `Jarvis/benchmarks` directory. The developer smoke script now creates that output
 directory before writing. This changes the report exporter, not the shipped EXE.
+
+## Independent Windows CI — complete
+
+[Run 42089775592](https://github.com/The-Hopee/jarvis-core/actions/runs/42089775592)
+completed successfully for main commit `f90aa0d`: dependency installation, MSVC
+C++20 build, 154 Python tests, all nine native scenarios, PyInstaller packaging,
+all frozen runtime/UI/privacy checks in an isolated Cyrillic profile, and artifact
+upload. This separately built CI artifact does not replace the published RC ZIP.
+The owner's source installation is running through `Jarvis-HomeAssistant` again.
+Another person's interactive installation and actual Windows logon remain pilot
+checks, as do Telegram and selected ordinary VK recipients.
