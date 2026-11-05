@@ -393,3 +393,13 @@ upload. This separately built CI artifact does not replace the published RC ZIP.
 The owner's source installation is running through `Jarvis-HomeAssistant` again.
 Another person's interactive installation and actual Windows logon remain pilot
 checks, as do Telegram and selected ordinary VK recipients.
+
+## Brief commands and delayed progress — source follow-up
+
+158 Python tests pass (46.994 seconds). Regression coverage exercises a slow brief
+turn with no status, a long explanation with the real current-stage notification,
+a minimum three-second delay despite legacy 0.8 settings, and a hearing check that
+bypasses the language model while preserving private mode. Existing cancellation,
+playback locking, missing-cache and privacy tests remain successful. All four
+owner status clips are cached. No test audio was played and no private account
+message was sent for this change. The published RC1 archive is unchanged.

@@ -10,6 +10,7 @@ from .config import USER_DIR
 
 STATUS_TEXT = {'asr': 'Распознаю команду, сэр.', 'model': 'Готовлю ответ, сэр.',
                'tool': 'Выполняю команду, сэр.', 'tts': 'Готовлю озвучивание, сэр.'}
+MIN_REQUEST_DELAY = 3.0
 
 
 def cache_directory(settings):
@@ -65,13 +66,19 @@ def prepare_status_voice(settings):
 
 
 class ProgressFeedback:
-    def __init__(self, speaker, *, delay=0.8, interval=8, enabled=True, stopped=None):
+    def __init__(self, speaker, *, delay=3.0, interval=8, enabled=True, stopped=None):
         self.speaker, self.delay, self.interval, self.enabled = speaker, delay, interval, enabled
         self.stopped = stopped or (lambda: False)
         self.cancelled = threading.Event()
         self.thread, self.trace = None, None
 
-    def start(self, trace):
+    def start(self, trace, *, text=None):
+        if text is not None:
+            from .command_policy import needs_progress
+            self.enabled=self.enabled and needs_progress(text)
+            # Old .env files may still contain 0.8; they must not bring back
+            # announcements immediately after every accepted utterance.
+            self.delay=max(MIN_REQUEST_DELAY,self.delay)
         if not self.enabled or self.thread is not None or self.cancelled.is_set():
             return
         self.trace = trace

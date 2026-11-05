@@ -207,7 +207,9 @@ def main():
                     feedback = ProgressFeedback(speaker, delay=settings.progress_delay,
                                                 enabled=settings.progress_enabled, stopped=runtime.stopped)
                     try:
-                        text = voice.next_command(stop_requested=runtime.stopped, on_accepted=feedback.start,interrupt_requested=jobs.store.has_notifications)
+                        # Classify the completed command before enabling spoken
+                        # progress; an ASR acceptance alone says nothing about it.
+                        text = voice.next_command(stop_requested=runtime.stopped,interrupt_requested=jobs.store.has_notifications)
                         if text is None:
                             if voice.last_interrupted:continue
                             break

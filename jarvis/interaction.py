@@ -13,7 +13,7 @@ def run_turn(assistant, speaker, text, *, trace=None, feedback=None, display=Non
     try:
         with trace.activate():
             if text:
-                feedback.start(trace)
+                feedback.start(trace,text=text)
             with measure('respond'):
                 if speaker.settings.llm_streaming and hasattr(getattr(assistant,'client',None),'stream_complete'):
                     from .sentence_speech import SentenceSpeech

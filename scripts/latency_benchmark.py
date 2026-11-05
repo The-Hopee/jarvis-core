@@ -176,7 +176,6 @@ def main():
                 def accepted(trace):
                     trace.source='benchmark_'+mode
                     trace.sink=lambda row:append_record({**row,'case_id':index+1,'startup_ms':startup_ms,'playback_is_virtual':args.virtual_output},log)
-                    feedback.start(trace)
                 try:
                     with patch('sounddevice.RawInputStream',replay.factory):
                         text=voice.next_command(stop_requested=done.is_set,on_accepted=accepted)

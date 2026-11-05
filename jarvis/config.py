@@ -77,7 +77,7 @@ class Settings:
     elevenlabs_asr_model: str = "scribe_v2"
     conversation_seconds: int = 40
     progress_enabled: bool = True
-    progress_delay: float = 0.8
+    progress_delay: float = 3.0
     tts_streaming: bool = True
     llm_streaming: bool = True
     document_roots: tuple[Path, ...] = (Path.home() / "Documents",)
@@ -136,7 +136,7 @@ class Settings:
         progress = values.get('JARVIS_PROGRESS', '1').strip()
         tts_streaming=values.get('JARVIS_TTS_STREAMING','1').strip()
         llm_streaming=values.get('JARVIS_LLM_STREAMING','1').strip()
-        progress_delay = float(values.get('JARVIS_PROGRESS_DELAY', '0.8'))
+        progress_delay = float(values.get('JARVIS_PROGRESS_DELAY', '3.0'))
         if progress not in {'0', '1'} or tts_streaming not in {'0','1'} or llm_streaming not in {'0','1'} or not math.isfinite(progress_delay) or not .2 <= progress_delay <= 10:
             raise ValueError('JARVIS_PROGRESS: 0 или 1; JARVIS_PROGRESS_DELAY: от 0.2 до 10 секунд')
         document_roots = tuple(Path(p.strip()).expanduser().resolve() for p in

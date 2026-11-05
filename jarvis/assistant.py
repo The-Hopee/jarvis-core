@@ -295,6 +295,9 @@ class Assistant:
             return Turn("К вашим услугам, сэр.")
         if len(text) > 8000:
             return Turn("Слишком длинный запрос. Разделите его на несколько частей.")
+        from .command_policy import quick_reply
+        brief=quick_reply(text)
+        if brief:return self._remember(text,Turn(brief))
         if re.fullmatch(r'(?:включи\s+)?(?:режим переписки|приватная переписка)[.!? ]*',text,re.I):
             self.private_session=True
             return Turn('Режим переписки включён. Диктовка остаётся локально. Для выхода скажите: «Заверши переписку».')

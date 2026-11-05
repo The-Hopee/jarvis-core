@@ -167,6 +167,68 @@ class TimingsTests(unittest.TestCase):
 
 
 class ProgressTests(unittest.TestCase):
+    def test_request_policy_distinguishes_brief_commands_and_long_work(self):
+        from jarvis.command_policy import needs_progress
+        for text in ('Джарвис, как меня слышно?', 'Ты меня слышишь?', 'Привет',
+                     'Джарвис, открой VS Code', 'Какая погода?', 'Состояние машины',
+                     'Сколько будет два плюс два?', 'Расскажи коротко про относительность',
+                     'Напиши Ивану в ВК: расскажи про теорию относительности'):
+            with self.subTest(brief=text):self.assertFalse(needs_progress(text))
+        for text in ('Джарвис, расскажи про теорию относительности Эйнштейна',
+                     'Объясни квантовую механику', 'Докажи теорему Пифагора',
+                     'Составь план проекта', 'Напиши код для проекта demo'):
+            with self.subTest(long=text):self.assertTrue(needs_progress(text))
+
+    def test_hearing_check_bypasses_language_model_and_preserves_private_mode(self):
+        from unittest.mock import Mock
+        from jarvis.command_policy import quick_reply
+        registry=ToolRegistry(object(),LocalServices(Settings(),object()))
+        model=Mock();assistant=Assistant(registry,model)
+        assistant.private_session=True
+        turn=assistant.respond('Джарвис, как меня слышно?')
+        self.assertEqual(turn.text,'Слышу вас, сэр.')
+        self.assertEqual(turn.tools,[])
+        self.assertTrue(assistant.private_session)
+        model.complete.assert_not_called()
+        self.assertIsNone(quick_reply('Напиши Ивану в ВК: как меня слышно?'))
+
+    def test_legacy_short_delay_cannot_announce_immediately(self):
+        trace=TurnTrace(sink=lambda _:None)
+        output=object();feedback=ProgressFeedback(output,delay=.8)
+        with patch('jarvis.progress.threading.Thread') as thread:
+            feedback.start(trace,text='Расскажи про теорию относительности')
+            self.assertEqual(feedback.delay,3.0)
+            thread.return_value.start.assert_called_once()
+
+    def test_slow_brief_turn_never_announces_but_long_turn_announces_real_stage(self):
+        class Output:
+            settings=Settings(tts='windows',progress_delay=.001,llm_streaming=False)
+            def __init__(self):self.kinds=[];self.played=threading.Event();self.answer=False
+            def play_status(self,kind,relevant):
+                if not relevant():return False
+                self.kinds.append(kind);self.played.set();return True
+            def speak(self,text,*,before_playback=None,stopped=None):
+                with measure('tts','fake'):
+                    time.sleep(.06)
+                    before_playback();self.answer=True
+        output=Output()
+        class Brief:
+            def respond(self,text):
+                with measure('model','fake'):time.sleep(.06)
+                return Turn('Слышу вас, сэр.')
+        with patch('jarvis.progress.MIN_REQUEST_DELAY',.02):
+            run_turn(Brief(),output,'Джарвис, как меня слышно?',trace=TurnTrace(sink=lambda _:None))
+        self.assertEqual(output.kinds,[]);self.assertTrue(output.answer)
+        output=Output()
+        class Long:
+            def respond(self,text):
+                with measure('model','fake'):
+                    if not output.played.wait(1):raise AssertionError('Long work had no progress')
+                return Turn('Объяснение готово.')
+        with patch('jarvis.progress.MIN_REQUEST_DELAY',.02):
+            run_turn(Long(),output,'Расскажи про теорию относительности Эйнштейна',trace=TurnTrace(sink=lambda _:None))
+        self.assertEqual(output.kinds,['model']);self.assertTrue(output.answer)
+
     def test_status_driver_timeout_releases_device_and_rejects_long_clip(self):
         from types import SimpleNamespace
         calls=[]
