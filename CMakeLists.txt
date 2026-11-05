@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(jarvis_core VERSION 0.4.0 LANGUAGES CXX)
+project(jarvis_core VERSION 0.5.0 LANGUAGES CXX)
 if(NOT WIN32)
     message(FATAL_ERROR "Jarvis Core requires Windows and the Windows SDK")
 endif()

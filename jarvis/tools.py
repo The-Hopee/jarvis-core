@@ -215,6 +215,14 @@ class ToolRegistry:
                 and (getattr(self, 'can_write_document', False) or t.name not in {'create_document', 'fill_document'})]
 
     def execute(self, name, arguments):
+        from .telemetry import measure
+        with measure('tool', name if name in self.tools else 'unknown') as timing:
+            result = self._execute(name, arguments)
+            if not result.get('ok'):
+                timing['status'] = 'error'
+            return result
+
+    def _execute(self, name, arguments):
         tool = self.tools.get(name)
         if not tool:
             return {"ok": False, "error": {"code": "unknown_tool", "message": "Неизвестный инструмент"}}

@@ -1,5 +1,36 @@
 # Validation
 
+## Version 0.5 — timings and cached progress
+
+2026-11-05: full Python suite: **100 tests pass**, native contract: **9 scenarios
+pass**. Release EXE/DLL and Python report version 0.5.0. Four short status clips
+were generated with the existing chosen reference A; credentials and account
+sessions were not changed. Tests cover slow/fast turns, status/final audio
+serialization, stale status cancellation, a bounded MCI status wait, absent cache,
+voice cache invalidation, failures, stop after synthesis, rejected tool timings,
+content-free logging, rotation and estimated Vosk word-end timestamps.
+
+32 synthetic WAVs were replayed in real time through the input pipeline with
+live OpenRouter ASR/LLM/TTS. Native system probes were real; app/site/weather
+actions were fixtures. No microphone or private chats were used. All 32 completed.
+That baseline candidate predates the final deterministic brevity and bounded MCI
+status guards; those changes received targeted automated checks and four final
+live cold repetitions. The four final repetitions synthesized audio silently;
+no playback-start result is claimed for them. All four completed.
+
+Baseline warm median/p95: ASR **1.413/1.917 s**, model requests **1.437/3.393 s**,
+TTS preparation **3.493/9.060 s**, estimated speech end to feedback
+**1.868/2.349 s**, to answer playback **8.472/15.388 s**. These are different
+stages, not additive totals. Word-end estimates and application playback dispatch
+are not an acoustic measurement. Responses/conditions vary across the corpus.
+Short cached feedback addresses silence; a 2–5 s substantive reply is not yet
+established. The next stage targets full-file TTS buffering.
+
+Aggregate data: [stage05-2026-11-05.json](benchmarks/stage05-2026-11-05.json).
+Usage, privacy of the separate metrics file and reproduction:
+[UPGRADE_05.md](UPGRADE_05.md). Existing assistant.log still logs console dialogue.
+VK music playback, live VK/TG sending and live coding remain separate open checks.
+
 ## VK login redirect fix
 
 2026-11-05: all 84 Python tests pass. The user completed VK login, but pressing

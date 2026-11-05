@@ -1,6 +1,7 @@
 """Local Russian ASR. Microphone is open only while listening, never during TTS."""
 from collections import deque
 import json
+import math
 from pathlib import Path
 import queue
 import re
@@ -8,6 +9,8 @@ import sys
 import time
 import urllib.request
 import zipfile
+
+from .telemetry import TurnTrace, measure, mark
 
 WAKE = re.compile(r"\b(?:джарвис|джервис|джарвиз|jarvis)\b", re.I)
 MODEL_NAME = "vosk-model-small-ru-0.22"
@@ -97,6 +100,7 @@ class VoiceInput:
         self.messages = deque(maxlen=5)
         self.settings = settings
         self.cloud_retry_at = 0
+        self.last_trace = None
 
     def after_response(self, seconds=None):
         # The timer starts after model/TTS latency, giving the user the full
@@ -112,7 +116,8 @@ class VoiceInput:
         try:
             from .cloud_voice import CloudVoice, OpenRouterVoice
             provider = OpenRouterVoice if self.settings.asr == "openrouter" else CloudVoice
-            transcript = provider(self.settings).transcribe(pcm, self.sample_rate)
+            with measure('asr', self.settings.asr_model if self.settings.asr == 'openrouter' else self.settings.elevenlabs_asr_model):
+                transcript = provider(self.settings).transcribe(pcm, self.sample_rate)
             match = WAKE.match(transcript.lstrip())
             if match:
                 transcript = transcript.lstrip()[match.end():].lstrip(" ,.!?:—-").strip()
@@ -120,21 +125,28 @@ class VoiceInput:
                 return ""  # An empty cloud transcription must not execute a command.
             return transcript
         except RuntimeError as exc:
+            mark('asr_fallback')
             self.cloud_retry_at = time.monotonic() + 60
             print("[Распознавание] " + str(exc) + " Использую локальное распознавание.", file=sys.stderr, flush=True)
             return command
 
-    def next_command(self, stop_requested=None):
+    def next_command(self, stop_requested=None, on_accepted=None):
         import sounddevice as sd
         import vosk
         audio = queue.Queue(maxsize=32)
         errors = queue.Queue(maxsize=4)
         recognizer = vosk.KaldiRecognizer(self.model, self.sample_rate)
+        if hasattr(recognizer, 'SetWords'):
+            recognizer.SetWords(True)
+        self.last_trace = None
         stop_requested = stop_requested or (lambda: False)
         # Keep at most 45 s of the current utterance, never idle room audio on disk.
         chunks = deque()
         buffered = 0
         selected = None
+        audio_origin, endpoint, estimated_end = None, None, None
+        timing_valid = True
+        audio_seconds = 0
 
         def callback(data, frames, timing, status):
             if status:
@@ -143,9 +155,19 @@ class VoiceInput:
                 except queue.Full:
                     pass
             try:
-                audio.put_nowait(bytes(data))
+                captured_end = time.monotonic()
+                try:
+                    # PortAudio clock differences avoid counting input-device
+                    # buffering as silence after the user's last word.
+                    captured_end -= max(0, timing.currentTime - timing.inputBufferAdcTime - frames / self.sample_rate)
+                except (AttributeError, TypeError):
+                    pass
+                audio.put_nowait((bytes(data), captured_end))
             except queue.Full:
-                pass
+                try:
+                    errors.put_nowait('audio_queue_overflow')
+                except queue.Full:
+                    pass
 
         # Return closes the stream before the assistant/network/TTS starts.
         with sd.RawInputStream(samplerate=self.sample_rate, blocksize=max(1024, self.sample_rate // 5),
@@ -154,17 +176,24 @@ class VoiceInput:
                 if stop_requested():
                     return None
                 try:
-                    chunk = audio.get(timeout=0.25)
+                    chunk, captured_end = audio.get(timeout=0.25)
                 except queue.Empty:
                     if not errors.empty():
                         raise RuntimeError("Ошибка микрофона: " + errors.get())
                     continue
                 chunks.append(chunk)
+                duration = len(chunk) / (self.sample_rate * 2)
+                audio_seconds += duration
+                if audio_origin is None:
+                    audio_origin = captured_end - duration
+                if not errors.empty():
+                    timing_valid = False
                 buffered += len(chunk)
                 while buffered > self.sample_rate * 2 * 45 and chunks:
                     buffered -= len(chunks.popleft())
                 if recognizer.AcceptWaveform(chunk):
-                    text = json.loads(recognizer.Result()).get("text", "")
+                    result = json.loads(recognizer.Result())
+                    text = result.get("text", "")
                     if not text:
                         chunks.clear()
                         buffered = 0
@@ -173,9 +202,24 @@ class VoiceInput:
                     command = self.gate.accept(text)
                     if command is not None:
                         selected = command, b"".join(chunks)
+                        endpoint = time.monotonic()
+                        words = result.get('result', [])
+                        last_word = words[-1].get('end') if words and isinstance(words[-1], dict) else None
+                        if timing_valid and isinstance(last_word, (int, float)) and math.isfinite(last_word) and 0 <= last_word <= audio_seconds:
+                            estimated_end = min(endpoint, audio_origin + last_word)
                         break
                     chunks.clear()
                     buffered = 0
         if stop_requested():
             return None
-        return self._refine(*selected) if selected is not None else None
+        if selected is None:
+            return None
+        self.last_trace = TurnTrace('voice', origin=estimated_end if estimated_end is not None else endpoint,
+                                    speech_end_source='vosk_word_end_estimate' if estimated_end is not None else 'endpoint_only')
+        with self.last_trace.activate():
+            mark('endpoint_final', at=endpoint)
+            if on_accepted is not None and selected[0]:
+                on_accepted(self.last_trace)
+            command = self._refine(*selected)
+            mark('asr_final')
+            return command

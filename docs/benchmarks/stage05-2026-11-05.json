@@ -1,0 +1,140 @@
+{
+  "method": "32 real-time synthetic warm replays with live ASR/LLM/TTS, real native system probes and fixture app/weather actions; final candidate four silent local cold repetitions. No microphone, private chats or real app launches. Warm run predates final brevity and status-driver guards. Cold playback deliberately omitted.",
+  "baseline_warm": {
+    "turns": 32,
+    "sources": {
+      "benchmark_warm": 32
+    },
+    "speech_end_sources": {
+      "vosk_word_end_estimate": 32
+    },
+    "metrics": {
+      "answer_playback_start_ms": {
+        "n": 32,
+        "p50_ms": 8471.83,
+        "p95_ms": 15387.896
+      },
+      "answer_ready_ms": {
+        "n": 32,
+        "p50_ms": 4212.458,
+        "p95_ms": 6092.176
+      },
+      "asr_ms": {
+        "n": 32,
+        "p50_ms": 1413.182,
+        "p95_ms": 1917.252
+      },
+      "endpoint_final_ms": {
+        "n": 32,
+        "p50_ms": 1032.13,
+        "p95_ms": 1524.614
+      },
+      "feedback_start_ms": {
+        "n": 32,
+        "p50_ms": 1868.048,
+        "p95_ms": 2348.661
+      },
+      "model_ms": {
+        "n": 32,
+        "p50_ms": 1437.409,
+        "p95_ms": 3392.653
+      },
+      "playback_ms": {
+        "n": 32,
+        "p50_ms": 5470.905,
+        "p95_ms": 20034.995
+      },
+      "status_playback_ms": {
+        "n": 32,
+        "p50_ms": 1752.166,
+        "p95_ms": 3595.168
+      },
+      "tool_ms": {
+        "n": 32,
+        "p50_ms": 0.031,
+        "p95_ms": 309.059
+      },
+      "tts_first_byte_ms": {
+        "n": 30,
+        "p50_ms": 6092.997,
+        "p95_ms": 12613.12
+      },
+      "tts_ms": {
+        "n": 32,
+        "p50_ms": 3492.814,
+        "p95_ms": 9059.782
+      },
+      "turn_end_ms": {
+        "n": 32,
+        "p50_ms": 13675.971,
+        "p95_ms": 35591.666
+      }
+    }
+  },
+  "final_cold_silent": {
+    "turns": 4,
+    "sources": {
+      "benchmark_cold": 4
+    },
+    "speech_end_sources": {
+      "vosk_word_end_estimate": 4
+    },
+    "metrics": {
+      "answer_ready_ms": {
+        "n": 4,
+        "p50_ms": 6094.743,
+        "p95_ms": 6331.51
+      },
+      "asr_final_ms": {
+        "n": 4,
+        "p50_ms": 2805.999,
+        "p95_ms": 3303.966
+      },
+      "asr_ms": {
+        "n": 4,
+        "p50_ms": 1551.601,
+        "p95_ms": 2214.231
+      },
+      "endpoint_final_ms": {
+        "n": 4,
+        "p50_ms": 1000.541,
+        "p95_ms": 1595.038
+      },
+      "model_ms": {
+        "n": 4,
+        "p50_ms": 2981.227,
+        "p95_ms": 3021.589
+      },
+      "playback_ms": {
+        "n": 4,
+        "p50_ms": 0.0,
+        "p95_ms": 0
+      },
+      "status_playback_ms": {
+        "n": 4,
+        "p50_ms": 0.0,
+        "p95_ms": 0
+      },
+      "tool_ms": {
+        "n": 4,
+        "p50_ms": 310.699,
+        "p95_ms": 316.851
+      },
+      "tts_first_byte_ms": {
+        "n": 4,
+        "p50_ms": 7935.708,
+        "p95_ms": 8518.508
+      },
+      "tts_ms": {
+        "n": 4,
+        "p50_ms": 6822.749,
+        "p95_ms": 8023.658
+      },
+      "turn_end_ms": {
+        "n": 4,
+        "p50_ms": 12931.3,
+        "p95_ms": 14335.163
+      }
+    }
+  }
+}

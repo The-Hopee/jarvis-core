@@ -6,10 +6,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
 from .config import ROOT
+from .telemetry import mark, measure
 
 
 def speech_key(text):
@@ -47,7 +49,7 @@ async def edge_save(text, voice, path, rate="+0%", pitch="-5Hz"):
     await asyncio.wait_for(communication.save(str(path)), timeout=20)
 
 
-def play_mp3(path):
+def play_mp3(path, *, max_seconds=None, on_start=None):
     winmm = ctypes.WinDLL("winmm")
     send = winmm.mciSendStringW
     send.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
@@ -57,8 +59,33 @@ def play_mp3(path):
     if error:
         raise RuntimeError("Windows не смог открыть звуковой файл")
     try:
-        if send(f"play {alias} wait", None, 0, None):
-            raise RuntimeError("Ошибка воспроизведения речи")
+        if max_seconds is not None:
+            if send(f'set {alias} time format milliseconds', None, 0, None):
+                raise RuntimeError('Не удалось проверить длительность статуса')
+            duration = ctypes.create_unicode_buffer(32)
+            if send(f'status {alias} length', duration, 32, None) or not duration.value.isdecimal() or int(duration.value) > max_seconds * 1000:
+                raise RuntimeError('Голосовой статус должен быть коротким')
+        if on_start:
+            on_start()
+        if max_seconds is None:
+            if send(f"play {alias} wait", None, 0, None):
+                raise RuntimeError("Ошибка воспроизведения речи")
+        else:
+            # Status playback must not hold the final answer hostage if the
+            # audio driver fails to signal completion.
+            if send(f'play {alias}', None, 0, None):
+                raise RuntimeError('Ошибка воспроизведения статуса')
+            deadline = time.monotonic() + max_seconds + .25
+            while time.monotonic() < deadline:
+                mode = ctypes.create_unicode_buffer(32)
+                if send(f'status {alias} mode', mode, 32, None):
+                    raise RuntimeError('Не удалось проверить воспроизведение статуса')
+                if mode.value.casefold() == 'stopped':
+                    break
+                time.sleep(.03)
+            else:
+                send(f'stop {alias}', None, 0, None)
+                raise RuntimeError('Время воспроизведения статуса истекло')
     finally:
         send(f"close {alias}", None, 0, None)
 
@@ -70,8 +97,46 @@ class Speaker:
         self.local_voice = None
         self.cloud_retry_at = 0
         self.recordings = None
+        self.playback_lock = threading.RLock()
+        from .progress import cache_directory
+        self.status_directory = cache_directory(settings)
 
-    def _play_recording(self, text):
+    def _play_file(self, path, *, before_playback=None, status=False, relevant=None):
+        if before_playback:
+            if before_playback() is False:
+                return False
+        with self.playback_lock:
+            if relevant is not None and not relevant():
+                return False
+            with measure('status_playback' if status else 'playback', path.suffix[1:], foreground=not status):
+                if path.suffix.lower() == '.wav':
+                    import wave
+                    if status:
+                        with wave.open(str(path), 'rb') as audio:
+                            if audio.getnframes() / audio.getframerate() > 6:
+                                return False
+                    import winsound
+                    mark('feedback_start' if status else 'answer_playback_start')
+                    winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_NODEFAULT)
+                else:
+                    # Marks application playback dispatch, not an acoustic
+                    # measurement of the first sample reaching the speakers.
+                    if status:
+                        play_mp3(path, max_seconds=6, on_start=lambda: mark('feedback_start'))
+                    else:
+                        play_mp3(path, on_start=lambda: mark('answer_playback_start'))
+            return True
+
+    def play_status(self, kind, relevant):
+        if self.muted or self.settings.tts == 'off' or kind not in {'asr', 'model', 'tool', 'tts'}:
+            return False
+        suffix = '.mp3' if self.settings.tts in {'openrouter', 'elevenlabs', 'edge'} else '.wav'
+        path = self.status_directory / (kind + suffix)
+        if not path.is_file() or not 100 < path.stat().st_size <= 512 * 1024:
+            return False
+        return self._play_file(path, status=True, relevant=relevant)
+
+    def _play_recording(self, text, before_playback=None):
         if not self.settings.voice_samples:
             return False
         try:
@@ -90,26 +155,23 @@ class Speaker:
             path = (manifest.parent / relative).resolve()
             if not path.is_relative_to(manifest.parent) or not path.is_file() or path.stat().st_size > 5 * 1024 * 1024:
                 raise ValueError("Аудиореплика вне каталога или превышает лимит")
-            if path.suffix.lower() == ".wav":
-                import winsound
-                winsound.PlaySound(str(path), winsound.SND_FILENAME)
-            elif path.suffix.lower() == ".mp3":
-                play_mp3(path)
-            else:
+            if path.suffix.lower() not in {'.wav', '.mp3'}:
                 raise ValueError("Нужен WAV или MP3")
+            mark('tts_ready')
+            self._play_file(path, before_playback=before_playback)
             return True
         except (OSError, ValueError, KeyError, TypeError, RuntimeError):
             self.recordings = {}
             print("[Голос] Записанная реплика недоступна; использую синтез речи.", file=sys.stderr)
             return False
 
-    def speak(self, text):
+    def speak(self, text, *, before_playback=None):
         if self.muted or self.settings.tts == "off":
             return
         text = spoken_text(text)
         if not text:
             return
-        if self._play_recording(text):
+        if self._play_recording(text, before_playback):
             return
         if self.settings.tts in {"elevenlabs", "openrouter"} and time.monotonic() >= self.cloud_retry_at:
             try:
@@ -117,22 +179,26 @@ class Speaker:
                 with tempfile.TemporaryDirectory(prefix="jarvis-cloud-voice-") as directory:
                     path = Path(directory) / "speech.mp3"
                     provider = OpenRouterVoice if self.settings.tts == "openrouter" else CloudVoice
-                    provider(self.settings).synthesize(text, path)
-                    play_mp3(path)
+                    with measure('tts', self.settings.tts_model if self.settings.tts == 'openrouter' else self.settings.elevenlabs_tts_model):
+                        provider(self.settings).synthesize(text, path)
+                    mark('tts_ready')
+                    self._play_file(path, before_playback=before_playback)
                 return
             except (RuntimeError, OSError):
+                mark('tts_fallback')
                 self.cloud_retry_at = time.monotonic() + 60
                 print("[Голос] Выбранный облачный голос недоступен; использую локальный мужской голос. Проверьте настройки ключа и выбранного голоса.", file=sys.stderr)
         if self.settings.tts in {"silero", "elevenlabs", "openrouter"}:
             try:
                 from .tts_local import LocalVoice
-                import winsound
                 if self.local_voice is None:
                     self.local_voice = LocalVoice(self.settings.local_speaker)
                 with tempfile.TemporaryDirectory(prefix="jarvis-local-voice-") as directory:
                     path = Path(directory) / "speech.wav"
-                    self.local_voice.save(text, path, rate=self.settings.tts_rate)
-                    winsound.PlaySound(str(path), winsound.SND_FILENAME)
+                    with measure('tts', 'silero'):
+                        self.local_voice.save(text, path, rate=self.settings.tts_rate)
+                    mark('tts_ready')
+                    self._play_file(path, before_playback=before_playback)
                 return
             except Exception:
                 print("[Голос] Локальный нейроголос недоступен; использую Windows.", file=sys.stderr)
@@ -140,15 +206,22 @@ class Speaker:
             try:
                 with tempfile.TemporaryDirectory(prefix="jarvis-speech-") as directory:
                     path = Path(directory) / "speech.mp3"
-                    asyncio.run(edge_save(text, self.settings.voice, path,
-                                          rate=self.settings.tts_rate, pitch=self.settings.tts_pitch))
-                    play_mp3(path)
+                    with measure('tts', 'edge'):
+                        asyncio.run(edge_save(text, self.settings.voice, path,
+                                              rate=self.settings.tts_rate, pitch=self.settings.tts_pitch))
+                    mark('tts_ready')
+                    self._play_file(path, before_playback=before_playback)
                 return
             except Exception:
                 self.edge_healthy = False
                 print("[Голос] Онлайн-синтез недоступен; использую русский голос Windows.", file=sys.stderr)
         try:
-            windows_speak(text)
+            with tempfile.TemporaryDirectory(prefix='jarvis-windows-voice-') as directory:
+                path = Path(directory) / 'speech.wav'
+                with measure('tts', 'windows'):
+                    windows_speak(text, path)
+                mark('tts_ready')
+                self._play_file(path, before_playback=before_playback)
         except (RuntimeError, OSError, subprocess.TimeoutExpired):
             print("[Голос] Озвучивание недоступно. Ответ остаётся в консоли.", file=sys.stderr)
 

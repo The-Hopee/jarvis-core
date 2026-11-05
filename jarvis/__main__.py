@@ -14,6 +14,9 @@ from .setup import configure, ensure_native_config
 from .speech import Speaker
 from .tools import ToolRegistry
 from .runtime import AlreadyRunning, RuntimeOwner, is_running
+from .interaction import run_turn
+from .progress import ProgressFeedback
+from .telemetry import mark
 
 
 def display(turn):
@@ -57,10 +60,22 @@ def main():
     group.add_argument("--download-voice", action="store_true", help="установить локальную русскую нейромодель голоса")
     group.add_argument("--telegram-login", action="store_true", help="локально подключить Telegram API")
     group.add_argument("--vk-login", action="store_true", help="войти в VK в отдельном браузере Джарвиса")
+    group.add_argument('--prepare-status-voice', action='store_true', help='однократно подготовить короткие статусы выбранным голосом')
+    group.add_argument('--latency-report', action='store_true', help='показать обезличенные замеры задержек')
     parser.add_argument("--mute", action="store_true", help="выводить ответы только текстом")
+    parser.add_argument('--latency-source', choices=('voice','text'), help='показывать метрики только голосовых или текстовых обращений')
     arguments = parser.parse_args()
     try:
         settings = Settings.load()
+        if arguments.latency_report:
+            from .telemetry import LOG_PATH, report
+            paths = [LOG_PATH.with_name(LOG_PATH.name + '.' + str(n)) for n in (3, 2, 1)] + [LOG_PATH]
+            print(json.dumps(report(paths, source=arguments.latency_source), ensure_ascii=False, indent=2))
+            return 0
+        if arguments.prepare_status_voice:
+            from .progress import prepare_status_voice
+            print(json.dumps({'cached_status_files': prepare_status_voice(settings)}, ensure_ascii=False, indent=2))
+            return 0
         if arguments.vk_login:
             from .vk_browser import login
             login()
@@ -112,6 +127,8 @@ def main():
                                   "local_speaker": settings.local_speaker,
                                   "asr": settings.asr, "conversation_seconds": settings.conversation_seconds,
                                   "asr_model": settings.asr_model, "tts_model": settings.tts_model,
+                                  "progress_enabled": settings.progress_enabled,
+                                  "status_clips_present": sum((speaker.status_directory / (kind + '.mp3')).is_file() or (speaker.status_directory / (kind + '.wav')).is_file() for kind in ('asr','model','tool','tts')),
                                   "voice_reference_present": bool(settings.voice_reference),
                                   "voice_samples_configured": bool(settings.voice_samples),
                                   "elevenlabs_key_present": bool(settings.elevenlabs_api_key),
@@ -130,9 +147,7 @@ def main():
             if not settings.api_key:
                 print("[Настройка] Ключ OpenRouter пока не задан: работают базовые локальные команды. Добавьте OPENROUTER_API_KEY в .env для свободного диалога.", file=sys.stderr)
             if arguments.once is not None:
-                turn = assistant.respond(arguments.once)
-                display(turn)
-                speaker.speak(turn.text)
+                turn = run_turn(assistant, speaker, arguments.once, display=display)
                 return 1 if turn.tools and any(not record["output"].get("ok") for record in turn.tools) else 0
             if arguments.text:
                 print("Текстовый режим. Для выхода: /exit. Голосовой ответ включён, если не задан --mute.")
@@ -142,35 +157,40 @@ def main():
                         break
                     if not text:
                         continue
-                    turn = assistant.respond(text)
-                    display(turn)
-                    speaker.speak(turn.text)
+                    run_turn(assistant, speaker, text, display=display)
             else:
                 from .voice import VoiceInput
                 voice = VoiceInput(settings)
                 print("Голосовой режим: скажите «Джарвис, состояние машины». Выход: «Джарвис, выход» или Ctrl+C.", flush=True)
                 while not runtime.stopped():
                     print("[Микрофон] Можно продолжать без имени…" if voice.gate.active() else "[Микрофон] Слушаю обращение «Джарвис»…", flush=True)
-                    text = voice.next_command(stop_requested=runtime.stopped)
-                    if text is None:
-                        break
-                    if text.casefold().strip(" .!?,") in {"выход", "завершить работу", "до свидания"}:
-                        speaker.speak("До связи.")
-                        break
-                    if text.casefold().strip(" .!?,") in {"спасибо хватит", "хватит", "тихий режим", "пока", "отбой", "спящий режим"}:
-                        voice.sleep()
-                        speaker.speak("Хорошо. Позови, когда понадоблюсь.")
-                        assistant.reset_conversation()
-                        continue
-                    print("Ты: " + (text or "Джарвис"), flush=True)
-                    turn = assistant.respond(text)
-                    display(turn)
-                    if not runtime.stopped():
-                        speaker.speak(turn.text)
-                        # Song lyrics must not become follow-up user commands.
-                        # A deliberate wake word alone still grants one short reply.
-                        playing_music = assistant.conversation.music_playing
-                        voice.after_response((8 if not text else 0) if playing_music else None)
+                    feedback = ProgressFeedback(speaker, delay=settings.progress_delay,
+                                                enabled=settings.progress_enabled, stopped=runtime.stopped)
+                    try:
+                        text = voice.next_command(stop_requested=runtime.stopped, on_accepted=feedback.start)
+                        if text is None:
+                            break
+                        trace = voice.last_trace
+                        with trace.activate():
+                            if text.casefold().strip(" .!?,") in {"выход", "завершить работу", "до свидания"}:
+                                mark('answer_ready')
+                                speaker.speak("До связи.", before_playback=feedback.stop)
+                                break
+                            if text.casefold().strip(" .!?,") in {"спасибо хватит", "хватит", "тихий режим", "пока", "отбой", "спящий режим"}:
+                                voice.sleep()
+                                mark('answer_ready')
+                                speaker.speak("Хорошо. Позови, когда понадоблюсь.", before_playback=feedback.stop)
+                                assistant.reset_conversation()
+                                continue
+                        print("Ты: " + (text or "Джарвис"), flush=True)
+                        run_turn(assistant, speaker, text, trace=trace, feedback=feedback, display=display, stopped=runtime.stopped)
+                        if not runtime.stopped():
+                            playing_music = assistant.conversation.music_playing
+                            voice.after_response((8 if not text else 0) if playing_music else None)
+                    finally:
+                        feedback.stop()
+                        if voice.last_trace is not None:
+                            voice.last_trace.finish('cancelled' if runtime.stopped() else 'completed')
         return 0
     except AlreadyRunning as exc:
         print(str(exc))

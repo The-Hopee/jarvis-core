@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import os
+import math
 from pathlib import Path
 import re
 
@@ -61,6 +62,8 @@ class Settings:
     elevenlabs_tts_model: str = "eleven_multilingual_v2"
     elevenlabs_asr_model: str = "scribe_v2"
     conversation_seconds: int = 40
+    progress_enabled: bool = True
+    progress_delay: float = 0.8
     document_roots: tuple[Path, ...] = (Path.home() / "Documents",)
     vscode_path: str = ""
     onlyoffice_path: str = ""
@@ -92,6 +95,10 @@ class Settings:
         conversation_seconds = int(values.get("JARVIS_CONVERSATION_SECONDS", "40"))
         if not 0 <= conversation_seconds <= 180:
             raise ValueError("JARVIS_CONVERSATION_SECONDS: от 0 до 180")
+        progress = values.get('JARVIS_PROGRESS', '1').strip()
+        progress_delay = float(values.get('JARVIS_PROGRESS_DELAY', '0.8'))
+        if progress not in {'0', '1'} or not math.isfinite(progress_delay) or not .2 <= progress_delay <= 10:
+            raise ValueError('JARVIS_PROGRESS: 0 или 1; JARVIS_PROGRESS_DELAY: от 0.2 до 10 секунд')
         document_roots = tuple(Path(p.strip()).expanduser().resolve() for p in
                                values.get("JARVIS_DOCUMENT_ROOTS", str(Path.home() / "Documents")).split(";") if p.strip())
         if not document_roots or len(document_roots) > 10 or any(str(p).startswith("\\\\") for p in document_roots):
@@ -132,6 +139,7 @@ class Settings:
                    elevenlabs_tts_model=values.get("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2").strip(),
                    elevenlabs_asr_model=values.get("ELEVENLABS_ASR_MODEL", "scribe_v2").strip(),
                    conversation_seconds=conversation_seconds, document_roots=document_roots,
+                   progress_enabled=progress == '1', progress_delay=progress_delay,
                    vscode_path=values.get("JARVIS_VSCODE_PATH", "").strip(),
                    onlyoffice_path=values.get("JARVIS_ONLYOFFICE_PATH", "").strip(),
                    model_path=Path(values.get("JARVIS_VOSK_MODEL", str(root / "models/vosk-model-small-ru-0.22"))))

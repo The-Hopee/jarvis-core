@@ -10,9 +10,14 @@ from .chat_intents import chat_intent
 from .applications import application_id
 from .conversation import Conversation
 from .music_intents import music_intent
+from .telemetry import measure
 
 SYSTEM_PROMPT = """Ты Джарвис, домашний голосовой помощник пользователя. Отвечай по-русски,
-спокойно и кратко, обычно 1–4 предложения. Лёгкая ирония допустима, выдуманные факты нет.
+спокойно и кратко. На бытовую команду обычно достаточно 1–2 коротких предложений,
+примерно 20–35 слов: результат и при необходимости один уместный вопрос. Не повторяй
+всю команду и содержимое созданного документа. На сложный вопрос сначала дай суть;
+подробности разворачивай, когда пользователь просит объяснение. Не сокращай диктуемый
+текст сообщения или данные документа. Лёгкая ирония допустима, выдуманные факты нет.
 Веди живой разговор и помни предыдущие реплики. Обращайся к владельцу на «вы», иногда
 используй «сэр», без повторения в каждом предложении. Манера — сдержанный внимательный
 дворецкий с лёгкой сухой иронией. Не начинай каждый ответ с «Отлично», не хвали обычные
@@ -238,6 +243,19 @@ class Assistant:
         self.registry.document_task = None
 
     def _remember(self, text, turn):
+        # Routine status reports should not turn into a long spoken inventory.
+        # Keep detailed analysis, drafts, uncertainty and multi-part requests intact.
+        if (len(turn.text) > 230 and len(turn.tools) == 1 and not turn.warning
+                and turn.tools[0]['name'] in {'get_system_status', 'get_weather'}):
+            record = turn.tools[0]
+            intent = local_intent(text)
+            simple = re.fullmatch(r'(?:какая\s+)?погода(?:\s+сейчас)?[.!?]*|(?:проверь\s+)?состояни[еяи]\s+(?:машины|компьютера|пк)[.!?]*', strip_wake(text), re.I)
+            detailed = re.search(r'подроб|объясни|почему|проанализ|посовет|\bоцени\b|\bзатем\b|\bпотом\b|\sи\s', text, re.I)
+            if (simple and intent and intent[0] == record['name'] and record['name'] in {'get_system_status', 'get_weather'}
+                    and not detailed and record['output'].get('ok')
+                    and not record['output'].get('result', {}).get('partial')
+                    and not record['output'].get('result', {}).get('diagnostics')):
+                turn.text = describe_tool(record['name'], record['output'])
         self.history = [*self.history, {"role": "user", "content": text},
                         {"role": "assistant", "content": turn.text}][-20:]
         return turn
@@ -286,7 +304,8 @@ class Assistant:
                 {"role": "tool", "tool_call_id": "local-launch", "content": json.dumps(output, ensure_ascii=False)}])
         try:
             for step in range(6):
-                message = self.client.complete(messages, self.registry.definitions(), allow_tools=step < 5)
+                with measure('model_round', getattr(self.client, 'model', 'configured')):
+                    message = self.client.complete(messages, self.registry.definitions(), allow_tools=step < 5)
                 calls = message.get("tool_calls") or []
                 if calls:
                     if step == 5 or not isinstance(calls, list) or len(calls) > 8 or calls_used + len(calls) > 12:

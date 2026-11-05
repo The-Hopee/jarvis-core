@@ -15,6 +15,7 @@ import wave
 
 from .http import ServiceError
 from .http import request_json
+from .telemetry import CURRENT, mark
 
 
 def wav_bytes(pcm, sample_rate):
@@ -82,7 +83,11 @@ def request_audio(url, *, data, headers, timeout=35, max_bytes=12 * 1024 * 1024)
     request = urllib.request.Request(url, data=data, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(max_bytes + 1)
+            first = response.read(1)
+            trace = CURRENT.get()
+            if first and trace is not None and trace.phase()[0] == 'tts':
+                mark('tts_first_byte')
+            raw = first + response.read(max_bytes + 1)
         if len(raw) > max_bytes:
             raise ServiceError("Ответ голосового сервиса превысил лимит")
         return raw

@@ -1,4 +1,5 @@
 from .http import ServiceError, request_json
+from .telemetry import measure
 
 
 class OpenRouterClient:
@@ -19,9 +20,10 @@ class OpenRouterClient:
         if not tools:
             for key in ("tools", "tool_choice", "parallel_tool_calls"):
                 body.pop(key, None)
-        response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,
-                             headers={"Authorization": "Bearer " + self._api_key, "X-Title": "Jarvis Home"},
-                             timeout=45)
+        with measure('model', self.model):
+            response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,
+                                 headers={"Authorization": "Bearer " + self._api_key, "X-Title": "Jarvis Home"},
+                                 timeout=45)
         if not isinstance(response, dict) or response.get("error"):
             raise ServiceError("OpenRouter вернул ошибку. Проверьте модель, баланс и поддержку tools.")
         try:
