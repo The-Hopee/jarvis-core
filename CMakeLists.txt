@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(jarvis_core VERSION 0.10.0 LANGUAGES CXX)
+project(jarvis_core VERSION 0.11.0 LANGUAGES CXX)
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

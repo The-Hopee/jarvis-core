@@ -32,6 +32,24 @@ class RoutingTests(unittest.TestCase):
         route=self.router.route('Напиши Ивану в телеграмме: реализуй проект на Python и создай документ')
         self.assertEqual(route.profile,'light');self.assertEqual(route.skills,('messaging',))
 
+    def test_unavailable_document_model_does_not_cool_down_light_profile(self):
+        from jarvis.assistant import Assistant
+        from jarvis.tools import ToolRegistry
+        from jarvis.services import LocalServices
+        class Client:
+            def __init__(self,model,fail=False):self.model,self.fail,self.calls=model,fail,0
+            def complete(self,*args,**kwargs):
+                self.calls+=1
+                if self.fail:raise ServiceError('offline')
+                return {'content':'На связи, сэр.'}
+        document=Client('doc',True);light=Client('light')
+        self.router.client=lambda route:document if route.profile=='documents' else light
+        kernel=object();registry=ToolRegistry(kernel,LocalServices(Settings(),kernel))
+        assistant=Assistant(registry,router=self.router)
+        self.assertTrue(assistant.respond('Объясни структуру документа').warning)
+        self.assertEqual(assistant.respond('Привет').text,'На связи, сэр.')
+        self.assertEqual(light.calls,1)
+
     def test_manual_mode_is_persistent_but_not_parsed_inside_data(self):
         self.assertIsNone(self.router.control('Напиши в телеграмме: включи кодящий режим'))
         self.assertTrue(self.router.control('включи кодящий режим'))

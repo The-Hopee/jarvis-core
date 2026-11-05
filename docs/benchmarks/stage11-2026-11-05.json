@@ -1,0 +1,94 @@
+{
+  "stage09-services": {
+    "weather": {
+      "ok": true,
+      "source": "Open-Meteo",
+      "source_time": "2026-11-05T18:30",
+      "configured_city_used": true
+    },
+    "youtube": {
+      "ok": true,
+      "source": null,
+      "results": 2
+    },
+    "documents": {
+      "source_preserved": true,
+      "copy_filled": true
+    }
+  },
+  "stage09-vk-lookup": {
+    "status": "ambiguous",
+    "candidates": 2,
+    "ambiguous_recipient_not_opened": true
+  },
+  "stage11-package-smoke": {
+    "offline_system_command": true,
+    "no_private_key": true,
+    "no_personal_voice": true,
+    "manifest_valid_after_execution": true,
+    "restricted_path": true,
+    "cyrillic_and_spaces": true,
+    "runtime": {
+      "native": {
+        "status": "ready",
+        "version": "0.11.0-rc.1"
+      },
+      "system_metrics": true,
+      "vosk_loaded": true,
+      "docx_create_fill_read": true,
+      "av_mp3_decoder": true,
+      "numpy": "2.5.4",
+      "playwright_driver_exists": true,
+      "russian_morphology": true,
+      "tkinter_imported": true,
+      "telegram_imported": true,
+      "private_key_present": false,
+      "voice_reference_present": false
+    },
+    "doctor_passed": true,
+    "control_passed": true,
+    "ui": {
+      "ui_created": true,
+      "buttons": 16,
+      "buttons_inside_window": true,
+      "width": 800,
+      "height": 730
+    },
+    "privacy": {
+      "passed": true,
+      "checks": {
+        "dictation_stayed_local": true,
+        "private_turn_labelled": true,
+        "private_session_blocks_unknown_dictation": true,
+        "private_history_withheld": true,
+        "private_label_blocks_llm": true,
+        "cloud_asr_disabled": true,
+        "private_tts_blocked": true,
+        "foreign_http_blocked": true,
+        "cloud_style_disabled": true
+      },
+      "real_account_access": false,
+      "real_network_requests": 0
+    }
+  },
+  "stage11-frozen-coding-smoke": {
+    "exit_code": 0,
+    "status": "ready_for_review",
+    "workers": 2,
+    "checks_passed": true,
+    "review_approved": true,
+    "budget": {
+      "limit_usd": 1.0,
+      "accounted_usd": 0.033351,
+      "reserved_usd": 0.0
+    },
+    "original_unchanged": true
+  },
+  "stage11-private-vk-smoke": {
+    "self_note_sent": true,
+    "cloud_model_calls": 0,
+    "private_turn": true,
+    "history_contains_note": false,
+    "dictation_mode": "vosk"
+  }
+}

@@ -78,6 +78,9 @@ class MessageLedger:
 
 
 def draft_reply(client, dialogue, instruction='Ответь по контексту в моём стиле'):
+    if not getattr(client,'is_local',False):
+        from .privacy import require_chat_cloud
+        require_chat_cloud()
     if client is None:
         raise ServiceError('Для ответа по контексту нужен рабочий ключ OpenRouter')
     messages = dialogue.get('messages', [])

@@ -112,7 +112,7 @@ class VoiceInput:
         self.gate.sleep()
 
     def _refine(self, command, pcm):
-        if not command or self.settings.asr == "vosk" or time.monotonic() < self.cloud_retry_at:
+        if not command or self.settings.asr == "vosk" or not self.settings.allow_cloud_asr or self.settings.privacy_mode=='offline_ai' or time.monotonic() < self.cloud_retry_at:
             return command
         try:
             from .cloud_voice import CloudVoice, OpenRouterVoice

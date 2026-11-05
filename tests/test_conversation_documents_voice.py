@@ -268,7 +268,7 @@ class CloudVoiceTests(unittest.TestCase):
         self.assertEqual(play.call_count, 1)
     def test_openrouter_transcription_and_reference_voice_use_existing_key(self):
         import base64
-        settings = Settings(api_key='fake-router-key')
+        settings = Settings(api_key='fake-router-key',allow_cloud_asr=True)
         captured = {}
         def http(url, **kwargs):
             captured.update(url=url, **kwargs)
@@ -297,7 +297,7 @@ class CloudVoiceTests(unittest.TestCase):
 
     def test_refinement_preserves_quoted_wake_name_and_recovers_from_outage(self):
         voice = VoiceInput.__new__(VoiceInput)
-        voice.settings, voice.sample_rate, voice.cloud_retry_at = Settings(asr='openrouter'), 16000, 0
+        voice.settings, voice.sample_rate, voice.cloud_retry_at = Settings(asr='openrouter',allow_cloud_asr=True), 16000, 0
         with patch('jarvis.cloud_voice.OpenRouterVoice.transcribe', return_value='Напиши ему: Привет, Джарвис!'):
             self.assertEqual(voice._refine('локальная расшифровка', b'audio'), 'Напиши ему: Привет, Джарвис!')
         with patch('jarvis.cloud_voice.OpenRouterVoice.transcribe', return_value='  Джарвис, открой VS Code.'):
@@ -312,7 +312,7 @@ class CloudVoiceTests(unittest.TestCase):
         def transport(url, **kwargs):
             captured.update(url=url, **kwargs)
             return json.dumps({'text': 'Джарвис, открой VS Code.'}, ensure_ascii=False).encode()
-        settings = Settings(elevenlabs_api_key='fake-secret')
+        settings = Settings(elevenlabs_api_key='fake-secret',allow_cloud_asr=True)
         text = CloudVoice(settings, transport).transcribe(b'\x01\x00' * 1600, 16000)
         self.assertIn('VS Code', text)
         boundary = captured['headers']['Content-Type'].split('boundary=')[1].encode()

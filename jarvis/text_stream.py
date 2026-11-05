@@ -7,6 +7,8 @@ from .telemetry import mark
 
 
 def events(body,headers,*,opener=urllib.request.urlopen):
+    from .privacy import check_url
+    check_url('https://openrouter.ai/api/v1/chat/completions')
     request=urllib.request.Request('https://openrouter.ai/api/v1/chat/completions',
         data=json.dumps(body,ensure_ascii=False).encode('utf-8'),headers={**headers,'Content-Type':'application/json','Accept':'text/event-stream'})
     total=0

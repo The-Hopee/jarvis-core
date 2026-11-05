@@ -64,6 +64,7 @@ class MessagingTests(unittest.TestCase):
 
     def test_style_uses_only_requested_dialogue_and_never_sends_itself(self):
         class Client:
+            is_local=True
             def complete(self, messages, tools, **kwargs):
                 payload = json.loads(messages[1]['content'])
                 self_payload = payload['style_examples']
@@ -82,6 +83,23 @@ class MessagingTests(unittest.TestCase):
 
 
 class VKFixtureTests(unittest.TestCase):
+    def test_modern_search_results_without_ids_keep_duplicate_names_ambiguous(self):
+        from playwright.sync_api import sync_playwright
+        from jarvis.vk_worker import VKPage
+        html='''<html><meta charset="utf-8"><body><div data-testid="me_convo_list"><input placeholder="Поиск">
+        <div class="SearchConvoTab__resultsContainer"><button class="SearchResult" role="menuitem" onclick="window.clicks=(window.clicks||0)+1"><h3 class="ConvoTitle__author">Сергей Иванов</h3></button>
+        <button class="SearchResult" role="menuitem" onclick="window.clicks=(window.clicks||0)+1"><h3 class="ConvoTitle__author">Сергей Иванов</h3></button></div></div></body></html>'''
+        with tempfile.TemporaryDirectory() as directory,sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=browser.new_page();page.route('https://vk.com/**',lambda route:route.fulfill(body=html,content_type='text/html; charset=utf-8'))
+                page.goto('https://vk.com/im');vk=VKPage(page,MessageLedger(Path(directory)/'ledger.db'))
+                ambiguous=vk.open_dialog('Сергей');self.assertEqual(ambiguous['status'],'ambiguous')
+                self.assertEqual(len(ambiguous['candidates']),2)
+                still_ambiguous=vk.open_dialog(ambiguous['candidates'][0]['id'])
+                self.assertEqual(still_ambiguous['status'],'ambiguous');self.assertFalse(page.evaluate('window.clicks||0'))
+            finally:browser.close()
+
     def test_modern_saved_messages_survive_reload_and_duplicate_does_not_send(self):
         from playwright.sync_api import sync_playwright
         from jarvis.vk_worker import VKPage

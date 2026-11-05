@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -77,7 +78,7 @@ class CodingTests(unittest.TestCase):
         with self.assertRaises(ServiceError):
             validate_plan(plan)
 
-    def test_two_agents_work_in_parallel_then_integrate_and_test(self):
+    def test_six_agents_run_in_bounded_waves_then_integrate_and_test(self):
         with tempfile.TemporaryDirectory(prefix='jarvis-coding-') as directory:
             root = Path(directory) / 'project'
             root.mkdir()
@@ -86,29 +87,29 @@ class CodingTests(unittest.TestCase):
             git(root, 'add', 'README.md')
             git(root, 'commit', '-m', 'initial')
             original = git(root, 'rev-parse', 'HEAD')
-            plan = {'summary': 'Two modules', 'tasks': [
-                {'id': 'module_a', 'goal': 'Create a.py', 'paths': ['a.py'], 'depends_on': []},
-                {'id': 'module_b', 'goal': 'Create b.py', 'paths': ['b.py'], 'depends_on': []}]}
+            plan = {'summary': 'Six modules', 'tasks': [
+                {'id':'module_'+str(i),'goal':'Create module','paths':['a'+str(i)+'.py'],'depends_on':[]} for i in range(6)]}
             planner = Model(call('submit_plan', plan))
             reviewer = Model(call('submit_review', {'approved': True, 'comments': 'Both modules and checks pass'}))
             barrier = threading.Barrier(2)
             def worker(task, workspace):
                 barrier.wait(timeout=5)
                 name = task['paths'][0]
-                value = 1 if name == 'a.py' else 2
+                value = int(name[1])
                 client = Model(call('write_file', {'path': name, 'content': f'VALUE = {value}\n'}), {'content': 'Implemented'})
                 return run_worker({'workspace': str(workspace), 'task': task, 'checks': []}, client)
             job = Path(directory) / 'job'
             job.mkdir()
-            checks = [[sys.executable, '-c', 'import a,b; assert a.VALUE + b.VALUE == 3']]
-            result = Orchestrator({'path': str(root), 'checks': checks}, 'Create two modules', job, planner, reviewer, worker).run()
+            checks = [[sys.executable, '-c', 'import a0,a1,a2,a3,a4,a5; assert a0.VALUE+a1.VALUE+a2.VALUE+a3.VALUE+a4.VALUE+a5.VALUE == 15']]
+            with patch('jarvis.agent_limits.capacity',return_value=2):
+                result = Orchestrator({'path': str(root), 'checks': checks}, 'Create six modules', job, planner, reviewer, worker).run()
             self.assertEqual(result['status'], 'ready_for_review')
             self.assertEqual(result['checks'][0]['exit_code'], 0)
-            self.assertEqual(len(result['workers']), 2)
+            self.assertEqual(len(result['workers']), 6)
             self.assertEqual(git(root, 'rev-parse', 'HEAD'), original)
-            self.assertFalse((root / 'a.py').exists())
-            self.assertTrue((job / 'integration/a.py').is_file())
-            self.assertTrue((job / 'integration/b.py').is_file())
+            self.assertFalse((root / 'a0.py').exists())
+            self.assertTrue((job / 'integration/a0.py').is_file())
+            self.assertTrue((job / 'integration/a5.py').is_file())
             self.assertEqual(git(root, 'status', '--porcelain'), '')
 
 

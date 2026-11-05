@@ -55,6 +55,8 @@ def main():
     group.add_argument("--text", action="store_true", help="текстовый ввод с голосовым ответом")
     group.add_argument("--once", help="выполнить одну текстовую команду")
     group.add_argument("--doctor", action="store_true", help="проверка установки без вызова LLM")
+    group.add_argument('--privacy-report',action='store_true',help='счётчики разрешённых и заблокированных обращений без содержимого данных')
+    group.add_argument('--privacy-check',action='store_true',help='локальная проверка защиты с вымышленными данными, без сети')
     group.add_argument("--list-mics", action="store_true", help="список микрофонов")
     group.add_argument("--download-model", action="store_true", help="скачать локальную русскую ASR-модель (~45 MB)")
     group.add_argument("--configure", action="store_true", help="локально ввести API-ключ и город")
@@ -78,6 +80,12 @@ def main():
             value=store.cancel(arguments.cancel_job) if arguments.cancel_job else store.recent(16)
             print(json.dumps(value,ensure_ascii=False,indent=2))
             return 0
+        if arguments.privacy_check:
+            from .privacy_check import main as privacy_check
+            return privacy_check()
+        if arguments.privacy_report:
+            from .privacy import report
+            print(json.dumps(report(),ensure_ascii=False,indent=2));return 0
         if arguments.latency_report:
             from .telemetry import LOG_PATH, report
             paths = [LOG_PATH.with_name(LOG_PATH.name + '.' + str(n)) for n in (3, 2, 1)] + [LOG_PATH]
@@ -133,6 +141,7 @@ def main():
                 for package in ("vosk", "sounddevice", "edge-tts", "jsonschema"):
                     packages[package] = importlib.metadata.version(package)
                 print(json.dumps({"native": ready, "voice_running": is_running(), "openrouter_key_present": bool(settings.api_key),
+                                  "privacy_mode":settings.privacy_mode,"chat_cloud_allowed":False,"allow_cloud_asr":settings.allow_cloud_asr,
                                   "model": settings.model, "tts": settings.tts, "voice": settings.voice,
                                   "voice_preset": settings.voice_preset,
                                   "local_speaker": settings.local_speaker,
@@ -174,7 +183,7 @@ def main():
                     if not text:
                         continue
                     for notification in jobs.drain(assistant):display(notification);speaker.speak(notification.text)
-                    control=jobs.control(text)
+                    control=jobs.control(text,assistant)
                     background=jobs.background_text(text)
                     if control:display(control);speaker.speak(control.text)
                     elif background:
@@ -215,7 +224,7 @@ def main():
                                 assistant.reset_conversation()
                                 continue
                         print("Ты: " + (text or "Джарвис"), flush=True)
-                        control=jobs.control(text)
+                        control=jobs.control(text,assistant)
                         background=jobs.background_text(text)
                         if control or background:
                             with trace.activate():

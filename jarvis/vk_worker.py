@@ -1,5 +1,6 @@
 """Serialized, visible VK messenger actions in a dedicated persistent browser."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -16,6 +17,7 @@ HEADERS=['.ConvoHeader__title','.im-page--title-main','.im-page--title','[data-t
 class VKPage:
     def __init__(self, page, ledger=None):
         self.page, self.ledger = page, ledger or MessageLedger()
+        self.recipient_queries={}
 
     def first_visible(self, selectors):
         for selector in selectors:
@@ -31,6 +33,7 @@ class VKPage:
 
     def open_dialog(self, recipient):
         self.ensure_messenger()
+        query=self.recipient_queries.get(recipient,recipient)
         self.self_dialog=False
         if normalized(recipient) in {'избранное','самому себе','себе','saved messages'}:
             search=self.first_visible(['[data-testid="me_convo_list"] input','input[placeholder="Поиск"]:not([data-testid="search_top_input"])'])
@@ -52,25 +55,31 @@ class VKPage:
             'input[placeholder="Поиск"]:not([data-testid="search_top_input"])', 'input[placeholder="Search"]', '[role="searchbox"]:not([data-testid="search_top_input"])'])
         if search is None:
             raise ServiceError('Не найден поиск диалогов VK. Откройте список сообщений в профиле Джарвиса.')
-        search.fill(name_key(recipient))
+        search.fill(name_key(query))
         # Bounded wait for the messenger to update its local/server search results.
         self.page.wait_for_timeout(700)
-        rows = self.page.locator('a[href*="sel="], a[href*="/im/convo/"], .im-dialog[data-peer], [data-testid="conversation-row"], [data-testid="vkme_convo_list_item"]')
+        rows = self.page.locator('a[href*="sel="], a[href*="/im/convo/"], .im-dialog[data-peer], [data-testid="conversation-row"], [data-testid="vkme_convo_list_item"], .SearchConvoTab__resultsContainer button.SearchResult[role="menuitem"]')
+        deadline=time.monotonic()+4
+        while not rows.count() and time.monotonic()<deadline:self.page.wait_for_timeout(100)
         candidates, identities = [], set()
         for index in range(min(rows.count(), 100)):
             row = rows.nth(index)
             if not row.is_visible():
                 continue
-            heading = row.locator('.ConvoTitle,.im-dialog--name, [data-testid="conversation-title"], [class*="DialogName"], [class*="ConversationTitle"]')
+            heading = row.locator('.ConvoTitle__author,.im-dialog--name, [data-testid="conversation-title"], [class*="DialogName"], [class*="ConversationTitle"]')
             title = heading.first.inner_text().strip() if heading.count() else row.inner_text().strip().split('\n')[0]
             href = row.get_attribute('href') or ''
             peer = row.get_attribute('data-peer') or row.get_attribute('data-peer-id') or ''
             identity = href or peer
-            if not title or not identity or identity in identities:
+            fallback=not identity
+            if fallback and title:identity='vk-name-'+hashlib.sha256(normalized(title).encode()).hexdigest()[:20]
+            # Duplicate full names without stable IDs must remain ambiguous.
+            if not title or not identity or not fallback and identity in identities:
                 continue
             identities.add(identity)
             candidates.append({'id': identity, 'name': title[:200], 'row_index': index})
-        selected = choose_recipient(recipient, candidates)
+            self.recipient_queries[identity]=title[:200]
+        selected = choose_recipient(recipient if any(c['id']==recipient for c in candidates) else query, candidates)
         if not selected['recipient']:
             return selected
         target = selected['recipient']
@@ -82,6 +91,7 @@ class VKPage:
         return {'recipient': {'id': target['id'], 'name': target['name']}, 'status': 'opened', 'url': self.page.url}
 
     def messages(self, limit):
+        own_id=self.page.evaluate("() => String(window.vk?.id || '')")
         rows = self.page.locator('.im-mess, [data-testid="message"], [data-message-id], .ConvoMessageWithoutBubble, .ConvoMessageBubble')
         result = []
         for index in range(max(0, rows.count() - limit), rows.count()):
@@ -92,6 +102,9 @@ class VKPage:
             text = text_node.first.inner_text().strip()
             classes = row.get_attribute('class') or ''
             outgoing = bool(re.search(r'im-mess_out|is-out|outgoing|--outgoing', classes)) or row.get_attribute('data-outgoing') == 'true' or getattr(self,'self_dialog',False)
+            author=row.locator('.ConvoMessageHeader__authorLink')
+            if not outgoing and own_id.isdecimal() and author.count():
+                outgoing=bool(re.search(r'(?:^|/)id'+re.escape(own_id)+r'(?:$|[/?#])',author.first.get_attribute('href') or ''))
             result.append({'id': row.get_attribute('data-msgid') or row.get_attribute('data-message-id'),
                            'text': text[:2000], 'outgoing': outgoing})
         return result
@@ -195,12 +208,17 @@ def main():
     from playwright.sync_api import sync_playwright
     parser = argparse.ArgumentParser()
     parser.add_argument('--profile', required=True)
+    parser.add_argument('--headless',action='store_true',help='browser integration tests without a visible window')
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding='utf-8')
+    sys.stdin.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     with sync_playwright() as playwright:
         profile = Path(args.profile)
         profile.mkdir(parents=True, exist_ok=True)
-        context = playwright.chromium.launch_persistent_context(str(profile), headless=False, locale='ru-RU')
+        from .browser_privacy import protect,environment
+        context = playwright.chromium.launch_persistent_context(str(profile), headless=args.headless, locale='ru-RU',service_workers='block',env=environment())
+        protect(context)
         try:
             session = VKSession(context)
             for line in sys.stdin:

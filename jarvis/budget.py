@@ -33,7 +33,7 @@ class Budget:
     def snapshot(self):
         with self.connect() as db:
             row=db.execute('SELECT cap,spent,reserved FROM budgets WHERE id=?',(self.ident,)).fetchone()
-        return dict(zip(('limit_usd','accounted_usd','reserved_usd'),row))
+        return dict(zip(('limit_usd','accounted_usd','reserved_usd'),(round(value,10) for value in row)))
 
     @contextmanager
     def call(self,body,model,output_tokens):

@@ -4,17 +4,20 @@ from contextlib import nullcontext
 
 
 class OpenRouterClient:
-    def __init__(self, api_key: str, model: str, http=request_json, max_tokens=600, budget=None, effort=''):
+    def __init__(self, api_key: str, model: str, http=request_json, max_tokens=600, budget=None, effort='',privacy_settings=None):
         self._api_key, self.model, self.http = api_key, model, http
         self.max_tokens = max_tokens
         self.budget,self.effort=budget,effort
         self.last_usage={}
+        self.privacy_settings=privacy_settings
 
     def stream_complete(self,messages,tools,*,allow_tools=False,on_text=None):
         from .text_stream import events,completion
         if allow_tools or tools:
             raise ServiceError('Голосовой поток разрешён только для ответа без инструментов')
         body={'model':self.model,'messages':messages,'max_tokens':self.max_tokens,'stream':True,'stream_options':{'include_usage':True}}
+        from .privacy import model_body
+        body=model_body(body,self.privacy_settings)
         with self.budget.call(body,self.model,self.max_tokens) if self.budget else nullcontext({}) as usage:
             def chunks():
                 for chunk in events(body,{'Authorization':'Bearer '+self._api_key,'X-Title':'Jarvis Home'}):
@@ -39,6 +42,8 @@ class OpenRouterClient:
             for key in ("tools", "tool_choice", "parallel_tool_calls"):
                 body.pop(key, None)
         if self.effort:body['reasoning']={'effort':self.effort}
+        from .privacy import model_body
+        body=model_body(body,self.privacy_settings)
         with self.budget.call(body,self.model,self.max_tokens) if self.budget else nullcontext({}) as usage:
             with measure('model', self.model):
                 response = self.http("https://openrouter.ai/api/v1/chat/completions", data=body,

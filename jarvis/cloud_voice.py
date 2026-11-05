@@ -51,6 +51,8 @@ class OpenRouterVoice:
         return {"Authorization": "Bearer " + self.settings.api_key, "X-Title": "Jarvis Home"}
 
     def transcribe(self, pcm, sample_rate):
+        from .privacy import require_audio
+        require_audio(self.settings,transcription=True)
         body = {"model": self.settings.asr_model, "language": "ru", "response_format": "json",
                 "input_audio": {"format": "wav", "data": base64.b64encode(wav_bytes(pcm, sample_rate)).decode("ascii")}}
         response = self.http("https://openrouter.ai/api/v1/audio/transcriptions", data=body,
@@ -58,6 +60,8 @@ class OpenRouterVoice:
         return transcript_text(response)
 
     def speech_body(self, text):
+        from .privacy import require_audio
+        require_audio(self.settings,text=text)
         body = {"model": self.settings.tts_model, "input": text, "response_format": "mp3"}
         if self.settings.voice_reference:
             path = Path(self.settings.voice_reference).expanduser()
@@ -90,6 +94,8 @@ class OpenRouterVoice:
 
 def stream_audio(url, *, data, headers, timeout=15, max_bytes=12*1024*1024):
     """Read available chunks, not an entire requested buffer. Never retry."""
+    from .privacy import check_url
+    check_url(url)
     request=urllib.request.Request(url,data=data,headers=headers)
     total=0
     try:
@@ -118,6 +124,8 @@ def stream_audio(url, *, data, headers, timeout=15, max_bytes=12*1024*1024):
 
 
 def request_audio(url, *, data, headers, timeout=35, max_bytes=12 * 1024 * 1024):
+    from .privacy import check_url
+    check_url(url)
     request = urllib.request.Request(url, data=data, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -145,6 +153,8 @@ class CloudVoice:
         return self.settings.elevenlabs_api_key
 
     def synthesize(self, text, destination):
+        from .privacy import require_audio
+        require_audio(self.settings,text=text)
         voice_id = self.settings.elevenlabs_voice_id
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}", voice_id):
             raise ServiceError("Укажите ELEVENLABS_VOICE_ID выбранного голоса в .env")
@@ -159,6 +169,8 @@ class CloudVoice:
         destination.write_bytes(raw)
 
     def transcribe(self, pcm, sample_rate):
+        from .privacy import require_audio
+        require_audio(self.settings,transcription=True)
         audio = wav_bytes(pcm, sample_rate)
         boundary = "jarvis_" + uuid.uuid4().hex
         fields = {"model_id": self.settings.elevenlabs_asr_model, "language_code": "ru",

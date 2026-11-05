@@ -168,8 +168,20 @@ class Speaker:
     def speak(self, text, *, before_playback=None, stopped=None):
         if self.muted or self.settings.tts == "off":
             return
+        from .privacy import PrivateText,clean_text
+        private=isinstance(text,PrivateText) or self.settings.privacy_mode=='offline_ai' or clean_text(text)!=text
         text = spoken_text(text)
         if not text:
+            return
+        if private:
+            # Explicit local branch: no cloud, Edge websocket or model fallback.
+            try:
+                with tempfile.TemporaryDirectory(prefix='jarvis-private-voice-') as directory:
+                    path=Path(directory)/'speech.wav'
+                    with measure('tts','windows_private'):windows_speak(text,path)
+                    self._play_file(path,before_playback=before_playback)
+            except (RuntimeError,OSError,subprocess.TimeoutExpired):
+                print('[Приватность] Локальная озвучка недоступна. Текст остаётся на ПК.',file=sys.stderr)
             return
         if self._play_recording(text, before_playback):
             return

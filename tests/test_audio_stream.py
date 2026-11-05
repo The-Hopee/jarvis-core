@@ -83,12 +83,12 @@ class StreamingTests(unittest.TestCase):
         class Response(io.BytesIO):
             headers={'Content-Type':'application/json'}
         with patch('urllib.request.urlopen',return_value=Response(b'{"secret":"not audio"}')) as request:
-            with self.assertRaises(RuntimeError):list(stream_audio('https://example.test',data=b'',headers={}))
+            with self.assertRaises(RuntimeError):list(stream_audio('https://openrouter.ai/api/v1/audio/speech',data=b'',headers={}))
             self.assertEqual(request.call_count,1)
         class Audio(io.BytesIO):
             headers={'Content-Type':'audio/mpeg'}
         with patch('urllib.request.urlopen',return_value=Audio(b'x'*1024)):
-            with self.assertRaises(RuntimeError):list(stream_audio('https://example.test',data=b'',headers={},max_bytes=100))
+            with self.assertRaises(RuntimeError):list(stream_audio('https://openrouter.ai/api/v1/audio/speech',data=b'',headers={},max_bytes=100))
 
     def test_failed_partial_stream_does_not_enter_local_fallback(self):
         speaker=Speaker(Settings(tts='openrouter'))

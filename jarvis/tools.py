@@ -125,7 +125,9 @@ class ToolRegistry:
         self.can_change_desktop = bool(re.search(r"сверн|громк|громче|тише|звук|minimiz|volume|mute", text, re.I))
         self.can_code = bool(re.search(r"(?:код|проект|репозитор|программ|модул|функци|тест|сервис)", text, re.I)
                              and re.search(r"напиш|исправ|реализ|добав|сделай|разработ|почини", text, re.I))
-        self.can_send = bool(re.search(r"\b(?:напиш\w*|отправ\w*|ответь|скажи|передай|send|reply)\b", text, re.I))
+        from .chat_intents import chat_intent
+        explicit=chat_intent(text)
+        self.can_send=bool(explicit and explicit[0] in {'send_message','reply_in_my_style'})
         if re.search(r"\bне\s+(?:отправ\w*|пиш\w*|отвеч\w*)|черновик|без\s+отправки|сначала\s+покажи", text, re.I):
             self.can_send = False
         self.can_write_document = bool(re.search(r"создай|создать|составь|составить|напиши|написать|заполни|заполнить|замени|заменить|впиши|добавь|сохрани", text, re.I))
@@ -167,6 +169,8 @@ class ToolRegistry:
         from .coding import start_job
         if not self.can_code:
             raise ServiceError('Кодящая задача не запрошена в текущем обращении пользователя')
+        if not re.search(r'(?<![\w-])'+re.escape(project_id)+r'(?![\w-])',self.user_request,re.I):
+            raise ServiceError('Назовите ID проекта в текущей команде. Джарвис не выбирает репозиторий за владельца.')
         if self.home_jobs is not None:
             from .coding import project_config
             if not project_config(project_id).get('checks'):raise ServiceError('Для проекта нужны команды проверки')
@@ -206,6 +210,9 @@ class ToolRegistry:
 
     def draft_reply(self, platform, recipient, instruction='Ответь по контексту в моём стиле'):
         from .messaging import draft_reply
+        if not getattr(self.chat_model,'is_local',False):
+            from .privacy import require_chat_cloud
+            require_chat_cloud()
         dialogue = self.read_dialog(platform, recipient, limit=30)
         if not dialogue.get('recipient'):
             return dialogue

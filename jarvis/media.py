@@ -25,6 +25,8 @@ def youtube_query(text):
 
 
 def fetch_html(url):
+    from .privacy import check_url
+    check_url(url)
     request = urllib.request.Request(url, headers={
         'User-Agent': 'Mozilla/5.0 JarvisHome/0.3', 'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.5'})
     try:

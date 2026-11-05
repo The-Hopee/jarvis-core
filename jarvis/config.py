@@ -46,6 +46,11 @@ class Settings:
     light_budget: float = .10
     document_budget: float = .30
     coding_budget: float = 1.0
+    privacy_mode: str = 'strict'
+    allow_cloud_asr: bool = False
+    agent_workers: int = 0
+    agent_memory_mb: int = 1024
+    max_plan_tasks: int = 64
     tts: str = "edge"
     voice: str = "ru-RU-DmitryNeural"
     voice_preset: str = "deep"
@@ -89,11 +94,19 @@ class Settings:
         values = {**read_env(USER_DIR / "settings.env"), **read_env(root / ".env"), **os.environ}
         latitude = values.get("JARVIS_LATITUDE", "").strip()
         profile_values={
+            'privacy_mode':values.get('JARVIS_PRIVACY_MODE','strict').strip(),
+            'allow_cloud_asr':values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip()=='1',
             'document_model':values.get('JARVIS_DOCUMENT_MODEL','openai/gpt-6.1-terra').strip(),
             'coding_model':values.get('JARVIS_CODING_MODEL','openai/gpt-6-sol').strip(),
             'document_effort':values.get('JARVIS_DOCUMENT_EFFORT','low').strip(),
             'coding_effort':values.get('JARVIS_CODING_EFFORT','high').strip(),
         }
+        if profile_values['privacy_mode'] not in {'strict','offline_ai'} or values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip() not in {'0','1'}:
+            raise ValueError('JARVIS_PRIVACY_MODE: strict/offline_ai; JARVIS_ALLOW_CLOUD_ASR: 0/1')
+        for name,default,low,high in [('agent_workers',0,0,32),('agent_memory_mb',1024,256,16384),('max_plan_tasks',64,2,512)]:
+            value=int(values.get('JARVIS_'+name.upper(),str(default)))
+            if not low<=value<=high:raise ValueError('Параметр пула агентов вне допустимого диапазона: '+name)
+            profile_values[name]=value
         for name,default in [('light_budget',.10),('document_budget',.30),('coding_budget',1.0)]:
             value=float(values.get('JARVIS_'+name.upper()+'_USD',str(default)))
             if not math.isfinite(value) or not .01<=value<=5:raise ValueError('Лимит профиля: 0.01–5 USD')
@@ -112,9 +125,11 @@ class Settings:
         tts = values.get("JARVIS_TTS", "edge").strip()
         if tts not in {"silero", "edge", "windows", "elevenlabs", "openrouter", "off"}:
             raise ValueError("JARVIS_TTS: silero, edge, windows, elevenlabs, openrouter или off")
+        if profile_values['privacy_mode']=='offline_ai' and tts!='off':tts='windows'
         asr = values.get("JARVIS_ASR", "vosk").strip()
         if asr not in {"vosk", "elevenlabs", "openrouter"}:
             raise ValueError("JARVIS_ASR: vosk, elevenlabs или openrouter")
+        if not profile_values['allow_cloud_asr'] or profile_values['privacy_mode']=='offline_ai':asr='vosk'
         conversation_seconds = int(values.get("JARVIS_CONVERSATION_SECONDS", "40"))
         if not 0 <= conversation_seconds <= 180:
             raise ValueError("JARVIS_CONVERSATION_SECONDS: от 0 до 180")
@@ -141,7 +156,7 @@ class Settings:
             raise ValueError("JARVIS_TTS_RATE: от -30% до +30%")
         if not re.fullmatch(r"[+-]\d{1,2}Hz", pitch) or not -50 <= int(pitch[:-2]) <= 50:
             raise ValueError("JARVIS_TTS_PITCH: от -50Hz до +50Hz")
-        return cls(root=root, api_key=values.get("OPENROUTER_API_KEY", "").strip(),**profile_values,
+        settings=cls(root=root, api_key=values.get("OPENROUTER_API_KEY", "").strip(),**profile_values,
                    model=values.get("OPENROUTER_MODEL", "").strip() or "openai/gpt-4.1-mini",
                    master_model=values.get("JARVIS_MASTER_MODEL", "").strip(),
                    worker_model=values.get("JARVIS_WORKER_MODEL", "").strip(),
@@ -170,3 +185,6 @@ class Settings:
                    vscode_path=values.get("JARVIS_VSCODE_PATH", "").strip(),
                    onlyoffice_path=values.get("JARVIS_ONLYOFFICE_PATH", "").strip(),
                    model_path=Path(values.get("JARVIS_VOSK_MODEL", str(root / "models/vosk-model-small-ru-0.22"))))
+        from .privacy import register_secrets
+        register_secrets(settings)
+        return settings

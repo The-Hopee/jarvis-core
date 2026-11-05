@@ -69,7 +69,9 @@ def login():
     PROFILE.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
         try:
-            context = playwright.chromium.launch_persistent_context(str(PROFILE), headless=False, locale='ru-RU')
+            from .browser_privacy import protect,environment
+            context = playwright.chromium.launch_persistent_context(str(PROFILE), headless=False, locale='ru-RU',service_workers='block',env=environment())
+            protect(context)
         except BrowserError as exc:
             raise ServiceError('Не удалось открыть профиль VK. Остановите Джарвиса через manage.cmd stop и закройте его окно подключения VK, затем повторите --vk-login.') from exc
         try:

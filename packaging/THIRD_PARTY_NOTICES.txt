@@ -1,0 +1,18 @@
+Jarvis includes third-party software. License files and metadata included by
+their distributions are retained under _internal and in this package.
+
+Python: https://www.python.org/psf/license/
+PyInstaller bootloader: https://pyinstaller.org/en/stable/license.html
+Vosk API and model: https://alphacephei.com/vosk/ and https://alphacephei.com/vosk/models
+PyAV and FFmpeg: https://pyav.org/ and https://ffmpeg.org/legal.html
+NumPy: https://numpy.org/doc/stable/license.html
+Playwright: https://github.com/microsoft/playwright-python
+sounddevice / PortAudio: https://python-sounddevice.readthedocs.io/
+Telethon: https://github.com/LonamiWebs/Telethon
+edge-tts: https://github.com/rany2/edge-tts
+pymorphy3 and dictionary: https://github.com/no-plagiarism/pymorphy3
+jsonschema: https://github.com/python-jsonschema/jsonschema
+nlohmann/json: https://github.com/nlohmann/json
+
+The owner's voice recordings, service keys and account sessions are not included.
+Cloud services and optionally downloaded browsers are separate components.

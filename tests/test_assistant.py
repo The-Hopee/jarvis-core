@@ -277,7 +277,7 @@ class RealIPCTests(unittest.TestCase):
             def transport(_url, **kwargs):
                 # The host may configure an HTTP proxy even for loopback traffic.
                 local_open = urllib.request.build_opener(urllib.request.ProxyHandler({})).open
-                with patch('urllib.request.urlopen', local_open):
+                with patch('urllib.request.urlopen', local_open),patch('jarvis.privacy.check_url'):
                     return request_json(f'http://127.0.0.1:{server.server_port}/chat/completions', **kwargs)
             with KernelClient(Settings().executable) as kernel:
                 registry = ToolRegistry(kernel, LocalServices(Settings(), kernel))

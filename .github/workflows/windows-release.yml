@@ -1,0 +1,54 @@
+name: Windows package
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements.lock.txt -r packaging/requirements-build.txt
+      - run: cmake -S . -B build -A x64
+      - run: cmake --build build --config Release
+      - run: python -m playwright install chromium
+      - run: python -m jarvis --download-model
+      - run: python -m unittest discover -s tests
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - run: python packaging/build_release.py
+      - run: python scripts/package_smoke.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-windows-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+      - name: Publish tagged candidate
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $release = gh release view $version --json assets 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output 'Release already exists; keep its verified assets unchanged.'
+            exit 0
+          }
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $version --prerelease --title "Jarvis $version" --notes-file docs/RELEASE_CANDIDATE.md
+            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed.' }
+            $release = gh release view $version --json assets
+          }
+          $names = @((($release | ConvertFrom-Json).assets) | ForEach-Object { $_.name })
+          Get-ChildItem -LiteralPath dist -File | Where-Object { $_.Extension -in '.zip','.sha256' } | ForEach-Object {
+            if ($_.Name -notin $names) {
+              gh release upload $version $_.FullName
+              if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed.' }
+            }
+          }

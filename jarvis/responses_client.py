@@ -5,11 +5,12 @@ from contextlib import nullcontext
 
 
 class ResponsesClient:
-    def __init__(self,api_key,model,*,effort='low',max_tokens=4000,http=request_json,budget=None,pricing=None):
+    def __init__(self,api_key,model,*,effort='low',max_tokens=4000,http=request_json,budget=None,pricing=None,privacy_settings=None):
         self._api_key,self.model,self.effort=api_key,model,effort
         self.max_tokens,self.http=max_tokens,http
         self.budget,self.pricing=budget,pricing
         self.last_usage={}
+        self.privacy_settings=privacy_settings
 
     @staticmethod
     def input_items(messages):
@@ -37,6 +38,8 @@ class ResponsesClient:
         if tools:
             body['tools']=[{'type':'function',**tool['function'],'strict':False} for tool in tools]
             body['tool_choice']='auto' if allow_tools else 'none'
+        from .privacy import model_body
+        body=model_body(body,self.privacy_settings)
         with self.budget.call(body,self.model,self.max_tokens) if self.budget else nullcontext({}) as usage:
             with measure('model',self.model):
                 response=self.http('https://openrouter.ai/api/v1/responses',data=body,

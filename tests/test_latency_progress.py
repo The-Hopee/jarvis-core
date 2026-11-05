@@ -83,7 +83,7 @@ class TimingsTests(unittest.TestCase):
         trace = TurnTrace('text', sink=rows.append, clock=lambda:clock[0])
         with trace.activate(), patch('urllib.request.urlopen', return_value=Response(b'ID3' + b'x'*200)):
             with measure('tts', 'fake'):
-                raw=request_audio('https://example.test',data=b'',headers={})
+                raw=request_audio('https://openrouter.ai/api/v1/audio/speech',data=b'',headers={})
         trace.finish()
         self.assertEqual(len(raw),203)
         self.assertEqual(rows[0]['events_ms']['tts_first_byte'],100)

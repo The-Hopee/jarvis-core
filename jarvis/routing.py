@@ -74,7 +74,7 @@ class Router:
 
     def client(self,route,*,budget=None,max_tokens=None):
         return make_client(self.settings.api_key,route.model,effort=route.effort,
-                           max_tokens=max_tokens or (600 if route.profile=='light' else 4000),budget=budget or Budget(limit=route.limit))
+                           max_tokens=max_tokens or (600 if route.profile=='light' else 4000),budget=budget or Budget(limit=route.limit),settings=self.settings)
 
     @staticmethod
     def tools(route):return set().union(*(SKILLS[name][0] for name in route.skills)) if route.skills else set()
@@ -83,10 +83,10 @@ class Router:
     def prompt(route):return '\nПодключённые скиллы:\n'+'\n'.join(name+': '+SKILLS[name][1] for name in route.skills)
 
 
-def make_client(key,model,*,effort='',max_tokens=600,budget=None):
+def make_client(key,model,*,effort='',max_tokens=600,budget=None,settings=None):
     if not key:return None
     if model.startswith('openai/gpt-6'):
         from .responses_client import ResponsesClient
-        return ResponsesClient(key,model,effort=effort or 'low',max_tokens=max_tokens,budget=budget)
+        return ResponsesClient(key,model,effort=effort or 'low',max_tokens=max_tokens,budget=budget,privacy_settings=settings)
     from .openrouter import OpenRouterClient
-    return OpenRouterClient(key,model,max_tokens=max_tokens,budget=budget,effort=effort)
+    return OpenRouterClient(key,model,max_tokens=max_tokens,budget=budget,effort=effort,privacy_settings=settings)

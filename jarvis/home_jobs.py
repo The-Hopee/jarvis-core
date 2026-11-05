@@ -56,6 +56,7 @@ class HomeJobs:
         payload=job['payload']
         from .routing import Router
         assistant=Assistant(registry,client,stopped=cancelled,router=Router(self.settings,mode=payload.get('mode','auto')))
+        assistant.private_session=bool(payload.get('private_session',False))
         assistant.history=copy.deepcopy(payload.get('history',[]))[-20:]
         assistant.conversation.context=copy.deepcopy(payload.get('context',{}))
         # Ambiguous-recipient send grants stay with the foreground conversation.
@@ -66,6 +67,7 @@ class HomeJobs:
             with trace.activate():turn=assistant.respond(payload['text'])
             state='completed'
             return {'text':turn.text,'warning':bool(turn.warning),
+                    'sensitive':turn.sensitive,
                     'success':all(r['output'].get('ok') for r in turn.tools) and (not turn.warning or bool(turn.tools)),
                     'artifacts':[r['output']['result']['path'] for r in turn.tools if r['output'].get('ok') and isinstance(r['output'].get('result',{}).get('path'),str)],
                     'tools':[{'name':r['name'],'ok':r['output'].get('ok')} for r in turn.tools]}
@@ -86,11 +88,17 @@ class HomeJobs:
         assistant.conversation.expire()
         job=self.store.submit('chat',{'text':text,'history':assistant.history[-20:],
                                       'context':assistant.conversation.context,
-                                      'mode':assistant.router.mode if assistant.router else 'auto'})
-        assistant.history=[*assistant.history,{'role':'user','content':text},{'role':'assistant','content':f"Задача {job['number']} принята в очередь."}][-20:]
+                                      'mode':assistant.router.mode if assistant.router else 'auto',
+                                      'private_session':assistant.private_session})
+        from .privacy import chat_action
+        from .chat_intents import chat_intent
+        private=assistant.private_session or bool(chat_intent(text)) or chat_action(text)
+        if private:assistant.private_session=True
+        public_text='[Локальная приватная операция]' if private else text
+        assistant.history=[*assistant.history,{'role':'user','content':public_text},{'role':'assistant','content':f"Задача {job['number']} принята в очередь."}][-20:]
         return job
 
-    def control(self,text):
+    def control(self,text,assistant=None):
         lower=strip_wake(text).casefold().strip(' .!?,')
         if re.fullmatch(r'(?:что\s+(?:сейчас\s+)?выполняется|какие\s+задачи|статус\s+задач|список\s+задач)',lower):
             jobs=self.store.recent(16)
@@ -103,7 +111,11 @@ class HomeJobs:
             except ServiceError as exc:return Turn(str(exc))
             if lower.startswith('отмени'):
                 return Turn(f"Отмена задачи {job['number']} {'завершена' if job['status']=='cancelled' else 'запрошена'}. Уже выполненные действия не откатываются.")
-            return Turn(f"Задача {job['number']}: {STAGES.get(job['stage'],STAGES.get(job['status'],'работает'))}."+((' '+job['result']['text']) if job.get('result',{} ) and job['result'].get('text') else ''))
+            message=f"Задача {job['number']}: {STAGES.get(job['stage'],STAGES.get(job['status'],'работает'))}."+((' '+job['result']['text']) if job.get('result',{} ) and job['result'].get('text') else '')
+            sensitive=bool(job.get('result')) and job['result'].get('sensitive',True)
+            if sensitive and assistant:assistant.private_session=True
+            from .privacy import PrivateText
+            return Turn(PrivateText(message) if sensitive else message,sensitive=sensitive)
         return None
 
     def drain(self,assistant=None):
@@ -111,11 +123,19 @@ class HomeJobs:
         for job in self.store.notifications(consume=True):
             if job['status']=='completed':
                 text=(job.get('result') or {}).get('text','Результат сохранён.')
+                sensitive=(job.get('result') or {}).get('sensitive',True)
                 artifacts=[{'name':'background_artifact','output':{'ok':True,'result':{'path':p}}} for p in (job.get('result') or {}).get('artifacts',[])]
-                turns.append(Turn(f"Задача {job['number']} готова. {text}",artifacts))
+                from .privacy import PrivateText
+                message=f"Задача {job['number']} готова. {text}"
+                turns.append(Turn(PrivateText(message) if sensitive else message,artifacts,sensitive=sensitive))
             elif job['status']=='cancelled':turns.append(Turn(f"Задача {job['number']} остановлена. Выполненные действия не откатываются."))
             elif job['status']=='interrupted':turns.append(Turn(f"Задача {job['number']} прервана перезапуском. Автоматически повторять её не буду."))
             else:turns.append(Turn(f"Задача {job['number']}: {STAGES.get(job['status'],'ошибка')}. "+(job.get('result') or {}).get('text','Подробности доступны в состоянии задачи.')))
+            if job.get('result') and job['result'].get('sensitive',True):
+                from .privacy import PrivateText
+                turns[-1].sensitive=True;turns[-1].text=PrivateText(turns[-1].text)
         if assistant:
-            for turn in turns:assistant.history=[*assistant.history,{'role':'assistant','content':turn.text}][-20:]
+            for turn in turns:
+                if turn.sensitive:assistant.private_session=True
+                assistant.history=[*assistant.history,{'role':'assistant','content':'Приватный результат остался на компьютере.' if turn.sensitive else turn.text}][-20:]
         return turns

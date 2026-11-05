@@ -9,6 +9,8 @@ class ServiceError(RuntimeError):
 
 def request_json(url: str, *, data: dict | bytes | None = None, headers: dict | None = None,
                  timeout: float = 15, max_bytes: int = 2 * 1024 * 1024):
+    from .privacy import check_url
+    check_url(url)
     request_headers = {"User-Agent": "JarvisHome/0.2 (personal desktop assistant)", "Accept": "application/json"}
     if isinstance(data, dict):
         data = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
