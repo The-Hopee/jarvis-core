@@ -49,6 +49,7 @@ class Settings:
     coding_budget: float = 1.0
     privacy_mode: str = 'strict'
     allow_cloud_asr: bool = False
+    messaging_enabled: bool = True
     local_ai_enabled: bool = False
     local_voice_enabled: bool = False
     local_ai_idle_seconds: int = 90
@@ -105,6 +106,7 @@ class Settings:
         profile_values={
             'privacy_mode':values.get('JARVIS_PRIVACY_MODE','strict').strip(),
             'allow_cloud_asr':values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip()=='1',
+            'messaging_enabled':values.get('JARVIS_MESSAGING_ENABLED','1').strip()=='1',
             'local_ai_enabled':values.get('JARVIS_LOCAL_AI','1' if local_config.get('enabled') else '0')=='1',
             'local_voice_enabled':values.get('JARVIS_LOCAL_VOICE','1' if local_config.get('voice_enabled') else '0')=='1',
             'local_ai_idle_seconds':int(values.get('JARVIS_LOCAL_IDLE_SECONDS',local_config.get('idle_seconds',90))),
@@ -117,6 +119,8 @@ class Settings:
         }
         if profile_values['privacy_mode'] not in {'strict','offline_ai'} or values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip() not in {'0','1'}:
             raise ValueError('JARVIS_PRIVACY_MODE: strict/offline_ai; JARVIS_ALLOW_CLOUD_ASR: 0/1')
+        if values.get('JARVIS_MESSAGING_ENABLED','1').strip() not in {'0','1'}:
+            raise ValueError('JARVIS_MESSAGING_ENABLED: 0/1')
         if not 5<=profile_values['local_ai_idle_seconds']<=600:raise ValueError('JARVIS_LOCAL_IDLE_SECONDS: от 5 до 600 секунд')
         for name,default,low,high in [('agent_workers',0,0,32),('agent_memory_mb',1024,256,16384),('max_plan_tasks',64,2,512)]:
             value=int(values.get('JARVIS_'+name.upper(),str(default)))

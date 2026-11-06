@@ -66,6 +66,7 @@ class ToolRegistry:
         from .vk_browser import VKBrowser
         from .openrouter import OpenRouterClient
         settings = getattr(services, 'settings', Settings())
+        self.messaging_enabled=settings.messaging_enabled
         self.telegram = TelegramAPI(settings,cancelled=cancelled)
         self.vk = shared_vk if shared_vk is not None else VKBrowser()
         self._owns_vk=shared_vk is None
@@ -197,9 +198,15 @@ class ToolRegistry:
         return job_status(job_id)
 
     def _backend(self, platform):
+        self._require_messaging()
         return self.telegram if platform == 'telegram' else self.vk
 
+    def _require_messaging(self):
+        if not self.messaging_enabled:
+            raise ServiceError('Работа с перепиской VK и Telegram отключена.')
+
     def open_dialog(self, platform, recipient):
+        self._require_messaging()
         if platform == 'telegram':
             return self.telegram.open(recipient, self.kernel)
         return self.vk.open(recipient)
@@ -226,6 +233,7 @@ class ToolRegistry:
         return {'status':'learned','examples':count,'recipient':dialogue['recipient']}
 
     def draft_reply(self, platform, recipient, instruction='Ответь по контексту в моём стиле'):
+        self._require_messaging()
         from .messaging import draft_reply
         client=self.local_ai.text if self.local_ai else self.chat_model
         if not getattr(client,'is_local',False):
@@ -258,8 +266,10 @@ class ToolRegistry:
         self.tools[tool.name] = tool
 
     def definitions(self):
+        from .privacy import PRIVATE_TOOLS
         return [{"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
                 for t in self.tools.values() if (self.can_send or t.name not in {'send_message', 'reply_in_my_style'})
+                and (self.messaging_enabled or t.name not in PRIVATE_TOOLS)
                 and (self.can_code or t.name != 'start_coding_task')
                 and (self.can_change_desktop or t.name not in {'minimize_windows', 'set_volume', 'adjust_volume', 'mute_audio'})
                 and (getattr(self, 'can_write_document', False) or t.name not in {'create_document', 'fill_document'})
@@ -295,6 +305,9 @@ class ToolRegistry:
         return None
 
     def _execute(self, name, arguments):
+        from .privacy import PRIVATE_TOOLS
+        if not self.messaging_enabled and name in PRIVATE_TOOLS:
+            return {'ok':False,'error':{'code':'messaging_disabled','message':'Работа с перепиской VK и Telegram отключена.'}}
         tool = self.tools.get(name)
         if not tool:
             return {"ok": False, "error": {"code": "unknown_tool", "message": "Неизвестный инструмент"}}

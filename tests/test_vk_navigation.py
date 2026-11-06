@@ -74,6 +74,12 @@ class VKNavigationTests(unittest.TestCase):
         with self.assertRaises(VKLoginRequired):
             wait_ready(self.page,'messenger',timeout=0.1)
 
+    def test_modern_qr_landing_is_login_not_infinite_loading(self):
+        self.page.goto('https://vk.ru/')
+        self.page.set_content('<h1>Вход ВКонтакте</h1><button>Войти другим способом</button>')
+        with self.assertRaises(VKLoginRequired):
+            wait_ready(self.page,'music',timeout=0.1)
+
     def test_network_failures_are_friendly_errors_and_not_retried(self):
         with patch.object(self.page,'goto',side_effect=BrowserError('net::ERR_NAME_NOT_RESOLVED')) as goto:
             with self.assertRaises(VKNavigationError):

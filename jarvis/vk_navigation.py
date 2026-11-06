@@ -41,13 +41,17 @@ def state(page):
     try:
         # Read visibility/URL classification only, never names, chat text,
         # credentials, cookie values or OAuth query parameters.
-        return page.evaluate("""fields => {
+        return page.evaluate(r"""fields => {
           const url = new URL(location.href);
           const visible = selectors => selectors.some(selector => Array.from(document.querySelectorAll(selector)).some(
             e => !!e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden'));
+          const profile=visible(fields.profile), messenger=visible(fields.messenger), music=visible(fields.music);
+          const landingLogin = url.pathname==='/' && !profile && !messenger && !music &&
+            Array.from(document.querySelectorAll('button,a,[role="button"]')).some(e =>
+              !!e.getClientRects().length && /^(?:Войти(?:\s|$)|Вход(?:\s|$)|Log in(?:\s|$))/i.test(e.innerText.trim()));
           return {host:url.hostname, path:url.pathname, protocol:url.protocol,
-            ready:document.readyState !== 'loading', login:visible(fields.login),
-            profile:visible(fields.profile), messenger:visible(fields.messenger), music:visible(fields.music)};
+            ready:document.readyState !== 'loading', login:visible(fields.login) || landingLogin,
+            profile, messenger, music};
         }""", FIELDS)
     except BrowserError as exc:
         if page.is_closed():

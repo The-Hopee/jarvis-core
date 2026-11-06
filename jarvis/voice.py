@@ -71,7 +71,10 @@ class WakeGate:
 
     def accept(self, text, now=None):
         now = time.monotonic() if now is None else now
-        match = WAKE.search(text)
+        text = text.strip()
+        # A name inside dictation ("привет от Джарвис") is data. In a
+        # follow-up it must never replace the whole command with a wake ack.
+        match = WAKE.match(text)
         if match:
             command = text[match.end():].strip(" ,.!?:—-")
             if command:
@@ -150,6 +153,7 @@ class VoiceInput:
         timing_valid = True
         audio_seconds = 0
         last_acoustic=0
+        wake_deadline = None
 
         def callback(data, frames, timing, status):
             if status:
@@ -191,7 +195,7 @@ class VoiceInput:
                     audio_origin = captured_end - duration
                 if not errors.empty():
                     timing_valid = False
-                if interrupt_requested is not None:
+                if interrupt_requested is not None or wake_deadline is not None:
                     samples=array('h');samples.frombytes(chunk)
                     if samples and sum(x*x for x in samples)/len(samples)>400*400:
                         last_acoustic=time.monotonic()
@@ -202,21 +206,34 @@ class VoiceInput:
                     result = json.loads(recognizer.Result())
                     text = result.get("text", "")
                     if not text:
-                        chunks.clear()
-                        buffered = 0
-                        continue
-                    self.messages.append(text)
-                    command = self.gate.accept(text)
-                    if command is not None:
-                        selected = command, b"".join(chunks)
-                        endpoint = time.monotonic()
-                        words = result.get('result', [])
-                        last_word = words[-1].get('end') if words and isinstance(words[-1], dict) else None
-                        if timing_valid and isinstance(last_word, (int, float)) and math.isfinite(last_word) and 0 <= last_word <= audio_seconds:
-                            estimated_end = min(endpoint, audio_origin + last_word)
+                        if wake_deadline is None:
+                            chunks.clear();buffered = 0
+                    else:
+                        self.messages.append(text)
+                        if wake_deadline is not None:
+                            # Speech begun after the wake word can exceed the
+                            # short follow-up window before ASR finalizes it.
+                            self.gate.resume()
+                        command = self.gate.accept(text)
+                        if command is not None:
+                            selected = command, b"".join(chunks)
+                            endpoint = time.monotonic()
+                            words = result.get('result', [])
+                            last_word = words[-1].get('end') if words and isinstance(words[-1], dict) else None
+                            if timing_valid and isinstance(last_word, (int, float)) and math.isfinite(last_word) and 0 <= last_word <= audio_seconds:
+                                estimated_end = min(endpoint, audio_origin + last_word)
+                            if command:
+                                break
+                            # Vosk can finalize just "Джарвис" at a short pause.
+                            # Keep the microphone open for the rest, before TTS.
+                            wake_deadline = endpoint + 1.2
+                        elif wake_deadline is None:
+                            chunks.clear();buffered = 0
+                if wake_deadline is not None:
+                    partial = json.loads(recognizer.PartialResult()).get('partial','') if hasattr(recognizer,'PartialResult') else ''
+                    if time.monotonic() >= wake_deadline and not partial and time.monotonic()-last_acoustic > .4:
                         break
-                    chunks.clear()
-                    buffered = 0
+                    continue
                 if interrupt_requested is not None and interrupt_requested():
                     partial=json.loads(recognizer.PartialResult()).get('partial','') if hasattr(recognizer,'PartialResult') else ''
                     if not partial and time.monotonic()-last_acoustic>.6:

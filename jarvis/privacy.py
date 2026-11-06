@@ -63,6 +63,16 @@ def context(settings=None,*,private=False):
 def private_request(text):
     return bool(re.search(r'телеграм|telegram|\bтг\b|вконтакт|\bвк\b|\bvk\b|диалог|переписк|сообщени|мо[её]м стиле',text,re.I))
 
+def messaging_request(text):
+    """Privacy preflight for a disabled messenger; music/site names are public."""
+    without_platform=re.sub(r'телеграм\w*|telegram|\bтг\b|вконтакт\w*|в\s+контакте|\bвк\b|\bvk\b',' ',text,flags=re.I)
+    if re.search(r'диалог|переписк|сообщени|черновик|мо[её]м стиле|приватн\w*\s+режим|(?:запомни|изучи|обучи).*стил',text,re.I):return True
+    if re.search(r'\b(?:черкни|отпиши|пошли|поздрав\w*|пожелай)\b',text,re.I):return True
+    if re.search(r'\b(?:напиш\w*|напис\w*|отправ\w*)\b',text,re.I):return chat_action(without_platform)
+    # "Скажи, какая погода" is a public question; an addressed VK/TG reply is
+    # not. This filter blocks dictation, it does not choose a home command.
+    return without_platform!=text and bool(re.search(r'\b(?:скажи|сообщи|передай|ответь)\b',text,re.I)) and not bool(re.search(r'\b(?:мне|нам)\b',without_platform,re.I))
+
 def chat_action(text):
     if re.search(r'телеграм|telegram|\bтг\b|вконтакт|\bвк\b|\bvk\b|диалог|переписк|мо[её]м стиле',text,re.I):return True
     first=re.search(r'\b(?:напиш\w*|напис\w*|отправ\w*|скажи|передай|ответь)\b',text,re.I)

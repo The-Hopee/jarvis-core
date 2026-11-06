@@ -1,0 +1,87 @@
+{
+  "model": "openai/gpt-4.1-mini",
+  "executor": "synthetic",
+  "real_account_actions": false,
+  "microphone_tested": false,
+  "cases": [
+    {
+      "id": "music_free",
+      "passed": true,
+      "seconds": 4.66,
+      "selected_tools": [
+        "search_vk_music",
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "music_vk",
+      "passed": true,
+      "seconds": 2.6,
+      "selected_tools": [
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "music_conversational",
+      "passed": true,
+      "seconds": 4.346,
+      "selected_tools": [
+        "search_vk_music",
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "pause",
+      "passed": true,
+      "seconds": 3.163,
+      "selected_tools": [
+        "control_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "previous",
+      "passed": true,
+      "seconds": 3.095,
+      "selected_tools": [
+        "control_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "app",
+      "passed": true,
+      "seconds": 3.987,
+      "selected_tools": [
+        "list_applications",
+        "open_application"
+      ],
+      "warning": false
+    },
+    {
+      "id": "video",
+      "passed": true,
+      "seconds": 2.776,
+      "selected_tools": [
+        "open_youtube_video"
+      ],
+      "warning": false
+    },
+    {
+      "id": "explanation",
+      "passed": true,
+      "seconds": 1.724,
+      "selected_tools": [],
+      "warning": false
+    }
+  ],
+  "budget": {
+    "limit_usd": 0.1,
+    "accounted_usd": 0.0066752,
+    "reserved_usd": 0.0
+  },
+  "passed": true
+}

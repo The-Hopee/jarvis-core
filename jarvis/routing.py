@@ -67,6 +67,10 @@ class Router:
             if 'documents' in skills:profile='documents'
             elif 'coding' in skills or re.search(r'докажи|выведи формулу|пошагов.*(?:математ|решени)|сложн.*(?:теорем|алгоритм)|проанализируй подробно',text,re.I):profile='coding'
             else:profile='light'
+        if profile=='light' and skills!=('messaging',):
+            # Let the language model choose among ordinary home capabilities.
+            # A synonym such as "хочу послушать" must not hide music tools.
+            skills=tuple(dict.fromkeys((*skills,'system','desktop','web','youtube','music','weather')))
         s=self.settings
         if profile=='documents':return Route(profile,s.document_model,s.document_effort,skills,s.document_budget)
         if profile=='coding':return Route(profile,s.coding_model,s.coding_effort,skills,s.coding_budget)

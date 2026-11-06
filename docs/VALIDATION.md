@@ -431,3 +431,30 @@ was performed. See docs/LOCAL_AI.md and the aggregate JSON in docs/benchmarks.
 Scope: source installation on the owner's PC. The immutable RC1 ZIP is unchanged;
 ordinary recipients, microphone accuracy, personal style quality, Telegram and
 another person's installation retain manual acceptance gates.
+
+## 2026-11-06: home commands via OpenRouter; messaging suspended
+
+The owner's latest decision supersedes the local-model rollout above. Runtime
+flags now disable messaging, the local LLM and local TTS; Vosk and public voice A
+remain. Messaging tools are absent from model definitions and reject direct
+execution. Recognized dictation is held locally with a disabled-feature response.
+Downloaded models and voice references were retained, not removed from disk.
+
+191 Python tests passed in 47.896 s. New regressions cover ASR splitting the wake
+word from a command, speech continuing beyond the wake grace period, notification
+interruptions, preserving an embedded wake name, disabled-tool enforcement,
+private-history isolation and modern QR-login landing detection. Audio chunks in
+these tests are fixtures; this is not a real-microphone acceptance test.
+
+Eight real OpenRouter cases passed using openai/gpt-4.1-mini: three free-form music
+requests, pause, previous track, app launch, YouTube video and a how-to question
+without actions. The selected calls and model rounds were real; tool executors
+were synthetic, with no app launch, audio playback or account action. The run cost
+$0.0066752. Metadata: docs/benchmarks/cloud-commands-2026-11-06.json. Reproduce with
+scripts/cloud_command_smoke.py, which makes paid API calls but no account actions.
+
+Live VK navigation currently reaches a login page; the owner observed a QR-code
+spinner. No successful authentication or music playback is claimed for this run.
+Login diagnosis and VK/TG messaging are deferred. Browser domain restrictions
+were not loosened. The normal runtime still needs microphone/end-to-end acceptance,
+actual music playback, coding/document acceptance and the uncle-PC pilot.
