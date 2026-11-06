@@ -458,3 +458,31 @@ spinner. No successful authentication or music playback is claimed for this run.
 Login diagnosis and VK/TG messaging are deferred. Browser domain restrictions
 were not loosened. The normal runtime still needs microphone/end-to-end acceptance,
 actual music playback, coding/document acceptance and the uncle-PC pilot.
+
+## 2026-11-06: remove incoming-message filter after false rejections
+
+The owner explicitly requested removal of incoming phrase filtering. The filter
+function and its pre-model call were removed, rather than expanded with more
+exceptions. Disabled messaging no longer participates in routing, private-mode
+controls or background-request classification. Message tools are not registered,
+direct calls remain blocked, and TelegramAPI is not instantiated. Music retains
+its separate VK browser tools. Recognized ordinary input now goes to OpenRouter;
+there is no claim that incoming dictated text is withheld from the model in this
+configuration. Stored chat histories remain inaccessible via disabled tools.
+
+192 Python tests passed in 47.421 s. Ten real OpenRouter scenarios passed,
+including a music title containing «Напиши» and an Office compound request that
+created and read back a real temporary DOCX. Browser playback/app launches used
+synthetic executors; no microphone or actual music playback is claimed.
+
+Two actual Office commands previously rejected in the owner's local log were
+then replayed through OpenRouter. Both selected create_document and created real,
+nonempty temporary DOCX files. Their original text and generated content were not
+published. Metadata-only reports are home-filter-removal-2026-11-06.json and
+office-log-replay-2026-11-06.json in docs/benchmarks. These runs cost $0.01182945
+and $0.002026. Temporary documents were removed with their test directories.
+
+Before installation restart, the owner requested a pause for an interview. The
+assistant was stopped and its scheduled task disabled. Source changes were saved
+without restarting the microphone or performing audible tests. Resume requires
+an explicit new instruction from the owner.

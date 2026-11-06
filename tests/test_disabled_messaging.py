@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
+import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 
 from jarvis.assistant import Assistant
 from jarvis.config import Settings
@@ -23,6 +25,7 @@ class DisabledMessagingTests(unittest.TestCase):
         registry,vk=self.registry();registry.can_send=True
         names={d['function']['name'] for d in registry.definitions()}
         self.assertFalse(names & PRIVATE_TOOLS);self.assertIn('play_vk_music',names)
+        self.assertFalse(set(registry.tools) & PRIVATE_TOOLS);self.assertIsNone(registry.telegram)
         for name in PRIVATE_TOOLS:
             with self.subTest(tool=name):
                 result=registry.execute(name,{'platform':'vk','recipient':'PRIVATE','text':'CANARY'})
@@ -31,17 +34,20 @@ class DisabledMessagingTests(unittest.TestCase):
         with self.assertRaises(ServiceError):registry.open_dialog('vk','PRIVATE')
         with self.assertRaises(ServiceError):registry.draft_reply('vk','PRIVATE')
 
-    def test_disabled_dictation_stays_out_of_cloud_and_conversation_history(self):
+    def test_disabled_messaging_does_not_filter_incoming_phrases(self):
         registry,vk=self.registry();cloud=Mock()
+        cloud.complete.return_value={'content':'Ответ модели.'}
         assistant=Assistant(registry,cloud)
-        for command in ('открой вк и напиши Пете CANARY_PRIVATE',
-                        'Черкни Пете в телеграме CANARY_PRIVATE',
+        for command in ('Включи в ВК песню Напиши мне',
+                        'Открой OnlyOffice и напиши какой-нибудь текст',
+                        'Напиши в документе сообщение о встрече',
                         'Режим переписки','Запомни мой стиль в этом диалоге'):
             with self.subTest(command=command):
-                turn=assistant.respond(command)
-                self.assertIn('отключена',turn.text);self.assertTrue(turn.sensitive)
-        self.assertNotIn('CANARY_PRIVATE',json.dumps(assistant.history))
-        cloud.complete.assert_not_called();vk.send.assert_not_called()
+                with patch('jarvis.privacy.chat_action',side_effect=AssertionError('Disabled filter was called')):
+                    turn=assistant.respond(command)
+                self.assertEqual(turn.text,'Ответ модели.')
+                self.assertEqual(cloud.complete.call_args.args[0][-1]['content'],command)
+        self.assertEqual(cloud.complete.call_count,5);vk.send.assert_not_called()
         self.assertIsNone(registry.local_ai)
 
     def test_free_form_music_reaches_cloud_tools_with_messaging_disabled(self):
@@ -63,12 +69,26 @@ class DisabledMessagingTests(unittest.TestCase):
             self.assertIn('play_vk_music',router.tools(router.route(command)))
             self.assertIn('control_vk_music',router.tools(router.route(command)))
 
-    def test_public_questions_are_not_disabled_with_messaging(self):
-        from jarvis.privacy import messaging_request
-        for text in ('Скажи какая погода','Ответь на вопрос о физике',
-                     'Давай что-нибудь от Егора Крида в ВК','Открой телеграм','Напиши код сортировки'):
-            self.assertFalse(messaging_request(text),text)
-        self.assertTrue(messaging_request('Скажи Пете в ВК CANARY_PRIVATE'))
+    def test_document_text_cannot_route_into_disabled_messaging_skill(self):
+        router=Router(Settings(messaging_enabled=False),mode='auto')
+        route=router.route('Открой OnlyOffice и напиши текст: напиши Ивану в ВК сообщение о встрече')
+        self.assertEqual(route.profile,'documents');self.assertNotIn('messaging',route.skills)
+        self.assertIn('create_document',router.tools(route))
+
+    def test_onlyoffice_compound_command_creates_real_docx(self):
+        from jarvis.documents import Documents
+        registry,_=self.registry()
+        with tempfile.TemporaryDirectory() as directory:
+            settings=Settings(messaging_enabled=False,document_roots=(Path(directory),))
+            registry.documents=Documents(settings,registry.kernel)
+            cloud=Mock();cloud.complete.side_effect=[{'content':None,'tool_calls':[{
+                'id':'doc1','type':'function','function':{'name':'create_document','arguments':json.dumps({
+                    'text':'Проверка документа. Сообщение внутри текста.',
+                    'filename':'regression.docx','open_after':False})}}]}, {'content':'Документ создан.'}]
+            turn=Assistant(registry,cloud).respond('Открой OnlyOffice и напиши текст: Проверка документа. Сообщение внутри текста.')
+            result=turn.tools[0]['output'];self.assertTrue(result['ok'],result)
+            saved=Path(result['result']['path']);self.assertTrue(saved.is_file())
+            self.assertIn('Сообщение внутри текста.',registry.documents.read(str(saved))['text'])
 
 
 if __name__=='__main__':unittest.main()

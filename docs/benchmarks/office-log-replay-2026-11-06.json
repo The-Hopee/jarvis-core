@@ -1,0 +1,35 @@
+{
+  "model": "openai/gpt-4.1-mini",
+  "executor": "synthetic_except_docx_creation",
+  "real_account_actions": false,
+  "replayed_log_commands": true,
+  "document_model": "openai/gpt-6.1-terra",
+  "real_docx_creation_tested": true,
+  "microphone_tested": false,
+  "cases": [
+    {
+      "id": "logged_document_1",
+      "passed": true,
+      "seconds": 4.227,
+      "selected_tools": [
+        "create_document"
+      ],
+      "warning": false
+    },
+    {
+      "id": "logged_document_2",
+      "passed": true,
+      "seconds": 3.522,
+      "selected_tools": [
+        "create_document"
+      ],
+      "warning": false
+    }
+  ],
+  "budget": {
+    "limit_usd": 0.1,
+    "accounted_usd": 0.002026,
+    "reserved_usd": 0.0
+  },
+  "passed": true
+}

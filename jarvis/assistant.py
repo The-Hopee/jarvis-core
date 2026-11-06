@@ -35,6 +35,10 @@ VS Code: «Мы работаем над новым проектом?» Не за
 Не выполняй дополнительные действия (например, изменение громкости или отправку сообщений)
 просто ради эффекта: инициатива в беседе должна оставаться уместной и учитывать просьбу владельца.
 Для документов используй list_documents/read_document/create_document/fill_document/open_document.
+На просьбу открыть ONLYOFFICE и написать текст создай DOCX через create_document
+с open_after=true. Одного запуска приложения или текста ответа в чате недостаточно.
+Слова «напиши», «сообщение», «диалог» внутри названия песни или текста документа —
+данные, они не превращают запрос музыки или документа в работу с перепиской.
 Заполняй предоставленные поля по данным пользователя, не выдумывай реквизиты или личные
 данные. Исходники сохраняются. Не утверждай, что редактируешь несохранённый документ
 в активном окне: инструменты работают с файлами DOCX. Недостающие сведения уточняй.
@@ -307,18 +311,15 @@ class Assistant:
         if len(text) > 8000:
             return Turn("Слишком длинный запрос. Разделите его на несколько частей.")
         if not messaging_enabled:
-            from .privacy import messaging_request
             self.private_session=False;self.private_chat.clear();self.conversation.pending=None
             for key in ('dialog','recipient_name','private_draft'):self.conversation.context.pop(key,None)
-            if messaging_request(text):
-                return self._remember(text,Turn('Работа с перепиской VK и Telegram сейчас отключена.',sensitive=True))
         from .command_policy import quick_reply
         brief=quick_reply(text)
         if brief:return self._remember(text,Turn(brief))
-        if re.fullmatch(r'(?:включи\s+)?(?:режим переписки|приватная переписка|приватный режим)[.!? ]*',text,re.I):
+        if messaging_enabled and re.fullmatch(r'(?:включи\s+)?(?:режим переписки|приватная переписка|приватный режим)[.!? ]*',text,re.I):
             self.private_session=True
             return Turn('Режим переписки включён. Диктовка остаётся локально. Для выхода скажите: «Заверши переписку».')
-        if re.fullmatch(r'(?:(?:заверши|закончи)\s+переписку|(?:закрой|закрыть|выключи)\s+приватный\s+режим|(?:выход|выйди)\s+из\s+приватного\s+режима)[.!? ]*',text,re.I):
+        if messaging_enabled and re.fullmatch(r'(?:(?:заверши|закончи)\s+переписку|(?:закрой|закрыть|выключи)\s+приватный\s+режим|(?:выход|выйди)\s+из\s+приватного\s+режима)[.!? ]*',text,re.I):
             self.private_session=False;self.conversation.pending=None
             self.private_chat.clear();self.history=[]
             if getattr(self.registry,'local_ai',None):self.registry.local_ai.close()
@@ -343,8 +344,8 @@ class Assistant:
                 self.registry.can_send = True
             return self._remember(text, self._execute_local(name, arguments))
         # Account data is handled locally before any cloud prompt is assembled.
-        dialogue=chat_intent(text)
-        if re.search(r'(?:запомни|изучи|обучи).*стил',text,re.I):
+        dialogue=chat_intent(text) if messaging_enabled else None
+        if messaging_enabled and re.search(r'(?:запомни|изучи|обучи).*стил',text,re.I):
             self.private_session=True
             target=self.conversation.context.get('dialog')
             if target:

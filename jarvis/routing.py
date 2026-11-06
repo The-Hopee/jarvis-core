@@ -58,9 +58,10 @@ class Router:
 
     def route(self,text):
         # Do not interpret dictated message content as a coding/document request.
-        dialogue=chat_intent(text)
+        dialogue=chat_intent(text) if self.settings.messaging_enabled else None
         if dialogue:skills=('messaging',)
-        else:skills=tuple(name for name,pattern in PATTERNS.items() if re.search(pattern,text,re.I))
+        else:skills=tuple(name for name,pattern in PATTERNS.items()
+                         if (self.settings.messaging_enabled or name!='messaging') and re.search(pattern,text,re.I))
         if not skills and re.search(r'прочитай|заполни|замени',text,re.I):skills=('documents',)
         profile=self.mode
         if profile=='auto':
@@ -70,7 +71,7 @@ class Router:
         if profile=='light' and skills!=('messaging',):
             # Let the language model choose among ordinary home capabilities.
             # A synonym such as "хочу послушать" must not hide music tools.
-            skills=tuple(dict.fromkeys((*skills,'system','desktop','web','youtube','music','weather')))
+            skills=tuple(dict.fromkeys((*skills,'system','desktop','web','youtube','music','weather','documents')))
         s=self.settings
         if profile=='documents':return Route(profile,s.document_model,s.document_effort,skills,s.document_budget)
         if profile=='coding':return Route(profile,s.coding_model,s.coding_effort,skills,s.coding_budget)

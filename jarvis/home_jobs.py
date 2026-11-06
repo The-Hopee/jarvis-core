@@ -92,7 +92,7 @@ class HomeJobs:
                                       'private_session':assistant.private_session})
         from .privacy import chat_action
         from .chat_intents import chat_intent
-        private=assistant.private_session or bool(chat_intent(text)) or chat_action(text)
+        private=assistant.registry.messaging_enabled and (assistant.private_session or bool(chat_intent(text)) or chat_action(text))
         if private:assistant.private_session=True
         public_text='[Локальная приватная операция]' if private else text
         assistant.history=[*assistant.history,{'role':'user','content':public_text},{'role':'assistant','content':f"Задача {job['number']} принята в очередь."}][-20:]

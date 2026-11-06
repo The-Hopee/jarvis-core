@@ -67,7 +67,7 @@ class ToolRegistry:
         from .openrouter import OpenRouterClient
         settings = getattr(services, 'settings', Settings())
         self.messaging_enabled=settings.messaging_enabled
-        self.telegram = TelegramAPI(settings,cancelled=cancelled)
+        self.telegram = TelegramAPI(settings,cancelled=cancelled) if self.messaging_enabled else None
         self.vk = shared_vk if shared_vk is not None else VKBrowser()
         self._owns_vk=shared_vk is None
         from .jobs import RESOURCES
@@ -260,6 +260,8 @@ class ToolRegistry:
         return {**result, 'style_examples_used': draft['style_examples_used']}
 
     def register(self, tool):
+        from .privacy import PRIVATE_TOOLS
+        if not self.messaging_enabled and tool.name in PRIVATE_TOOLS:return
         Draft202012Validator.check_schema(tool.parameters)
         if tool.name in self.tools:
             raise ValueError("Повторное имя инструмента")

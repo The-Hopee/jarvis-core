@@ -1,0 +1,107 @@
+{
+  "model": "openai/gpt-4.1-mini",
+  "executor": "synthetic_except_docx_creation",
+  "real_account_actions": false,
+  "document_model": "openai/gpt-6.1-terra",
+  "real_docx_creation_tested": true,
+  "microphone_tested": false,
+  "cases": [
+    {
+      "id": "music_free",
+      "passed": true,
+      "seconds": 4.71,
+      "selected_tools": [
+        "search_vk_music",
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "music_vk",
+      "passed": true,
+      "seconds": 2.764,
+      "selected_tools": [
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "music_conversational",
+      "passed": true,
+      "seconds": 4.492,
+      "selected_tools": [
+        "search_vk_music",
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "music_title",
+      "passed": true,
+      "seconds": 3.04,
+      "selected_tools": [
+        "play_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "pause",
+      "passed": true,
+      "seconds": 3.111,
+      "selected_tools": [
+        "control_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "previous",
+      "passed": true,
+      "seconds": 2.948,
+      "selected_tools": [
+        "control_vk_music"
+      ],
+      "warning": false
+    },
+    {
+      "id": "app",
+      "passed": true,
+      "seconds": 4.093,
+      "selected_tools": [
+        "list_applications",
+        "open_application"
+      ],
+      "warning": false
+    },
+    {
+      "id": "video",
+      "passed": true,
+      "seconds": 2.467,
+      "selected_tools": [
+        "open_youtube_video"
+      ],
+      "warning": false
+    },
+    {
+      "id": "explanation",
+      "passed": true,
+      "seconds": 1.714,
+      "selected_tools": [],
+      "warning": false
+    },
+    {
+      "id": "onlyoffice_text",
+      "passed": true,
+      "seconds": 3.94,
+      "selected_tools": [
+        "create_document"
+      ],
+      "warning": false
+    }
+  ],
+  "budget": {
+    "limit_usd": 0.1,
+    "accounted_usd": 0.01182945,
+    "reserved_usd": 0.0
+  },
+  "passed": true
+}
