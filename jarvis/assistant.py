@@ -150,9 +150,11 @@ def describe_tool(name, output):
         return 'Открываю диалог с ' + result['recipient']['name'] + '.'
     if name == 'draft_reply':
         return 'Черновик: ' + result['text']
+    if name == 'learn_style':
+        return f"Запомнил {result['examples']} примеров вашего стиля в этом диалоге, сэр. Они сохраняются только на ПК."
     if name in {'send_message', 'reply_in_my_style'}:
         if result.get('status') == 'sent':
-            return 'Сообщение отправлено: ' + (result.get('text') or 'сервер подтвердил отправку')
+            return 'Сообщение отправлено, сэр.'
         return 'Не удалось подтвердить отправку сообщения. Повторно его не отправляю, чтобы избежать дубля.'
     if name == "get_system_status":
         metrics = result["metrics"]
@@ -243,6 +245,9 @@ class Assistant:
         self.stopped=stopped or (lambda:False)
         self.router=router
         self.private_session=False
+        from .private_chat import PrivateChat
+        local_ai=getattr(registry,'local_ai',None)
+        self.private_chat=PrivateChat(local_ai.text if local_ai else None)
 
     def check_cancelled(self):
         if self.stopped():
@@ -254,6 +259,7 @@ class Assistant:
         self.conversation.clear()
         self.registry.document_task = None
         self.private_session=False
+        self.private_chat.clear()
 
     def _remember(self, text, turn):
         from .privacy import PRIVATE_TOOLS,PrivateText
@@ -298,12 +304,15 @@ class Assistant:
         from .command_policy import quick_reply
         brief=quick_reply(text)
         if brief:return self._remember(text,Turn(brief))
-        if re.fullmatch(r'(?:включи\s+)?(?:режим переписки|приватная переписка)[.!? ]*',text,re.I):
+        if re.fullmatch(r'(?:включи\s+)?(?:режим переписки|приватная переписка|приватный режим)[.!? ]*',text,re.I):
             self.private_session=True
             return Turn('Режим переписки включён. Диктовка остаётся локально. Для выхода скажите: «Заверши переписку».')
-        if re.fullmatch(r'(?:заверши|закончи)\s+переписку[.!? ]*',text,re.I):
+        if re.fullmatch(r'(?:(?:заверши|закончи)\s+переписку|(?:закрой|закрыть|выключи)\s+приватный\s+режим|(?:выход|выйди)\s+из\s+приватного\s+режима)[.!? ]*',text,re.I):
             self.private_session=False;self.conversation.pending=None
+            self.private_chat.clear();self.history=[]
+            if getattr(self.registry,'local_ai',None):self.registry.local_ai.close()
             self.conversation.context.pop('dialog',None);self.conversation.context.pop('recipient_name',None)
+            self.conversation.context.pop('private_draft',None)
             return Turn('Переписка завершена. Можно снова задать обычный вопрос ИИ.')
         if text.casefold() in {"забудь разговор", "новый разговор", "/reset"}:
             self.reset_conversation()
@@ -313,6 +322,7 @@ class Assistant:
             if control:return Turn(control)
         if text.casefold().strip(" .!?,") in {"спасибо", "благодарю", "спасибо джарвис", "спасибо, джарвис"}:
             return self._remember(text, Turn("Всегда к вашим услугам, сэр."))
+        if self.private_chat.pending:return self._respond_private(text)
         followup = self.conversation.followup(text)
         if followup:
             name, arguments, inherited_send = followup
@@ -323,19 +333,30 @@ class Assistant:
             return self._remember(text, self._execute_local(name, arguments))
         # Account data is handled locally before any cloud prompt is assembled.
         dialogue=chat_intent(text)
-        if dialogue:return self._remember(text,self._execute_local(*dialogue))
+        if re.search(r'(?:запомни|изучи|обучи).*стил',text,re.I):
+            self.private_session=True
+            target=self.conversation.context.get('dialog')
+            if target:
+                return self._remember(text,self._execute_local('learn_style',target))
+            return self._remember(text,Turn('Сначала откройте нужный диалог, сэр.',sensitive=True))
+        if dialogue and not (dialogue[0]=='open_dialog' and re.search(r'напиши|отправь',text,re.I)):
+            if dialogue[0]=='send_message':return self._respond_private(text)
+            return self._remember(text,self._execute_local(*dialogue))
         from .privacy import chat_action
         if chat_action(text):
             self.private_session=True
             immediate_private=local_intent(text)
             if immediate_private:
+                if immediate_private[0] in {'open_dialog','send_message','read_dialog','reply_in_my_style'}:
+                    return self._respond_private(text)
                 turn=self._execute_local(*immediate_private);turn.sensitive=True
                 return self._remember(text,turn)
-            return self._remember(text,Turn('Уточните локальную команду: «Напиши Имя в телеграмме: текст» или «Открой диалог с Имя в ВК». Эта просьба не отправлялась облачной модели.',sensitive=True))
+            return self._respond_private(text)
         simple = local_intent(text) if SIMPLE_READ.fullmatch(text) else None
         if simple and simple[0] in {'get_system_status','get_weather'}:
             return self._remember(text,self._execute_local(*simple))
         if self.private_session:
+            if self.private_chat.client:return self._respond_private(text)
             return self._remember(text,Turn('Сейчас включён локальный режим переписки. Уточните команду либо скажите «Заверши переписку» для обычного разговора.',sensitive=True))
         route=None
         if self.router:
@@ -437,6 +458,18 @@ class Assistant:
             offline = self._offline(text)
             offline.warning = str(exc)
             return self._remember(text, offline)
+
+    def _respond_private(self,text):
+        self.private_session=True
+        self.conversation.expire();self.conversation.context.pop('private_draft',None)
+        try:
+            decision=self.private_chat.handle(text,self.conversation.context)
+            if decision.tool:
+                self.registry.can_send=decision.can_send
+                turn=self._execute_local(decision.tool,decision.arguments);turn.sensitive=True
+            else:turn=Turn(decision.say,sensitive=True)
+        except ServiceError as exc:turn=Turn(str(exc),sensitive=True)
+        return self._remember(text,turn)
 
     def _execute_local(self, name, arguments):
         output = self.registry.execute(name, arguments)

@@ -10,14 +10,17 @@ PROFILE = USER_DIR / 'vk-browser'
 
 
 class VKBrowser:
-    def __init__(self):
+    def __init__(self,*,headless=False):
         self.process = None
         self.music_active=None
+        self.headless=headless
 
     def call(self, method, **params):
         if self.process is None:
             from .child_process import command
-            self.process = JsonProcessClient(command('jarvis.vk_worker','--profile',PROFILE), timeout=50, cwd=ROOT)
+            args=command('jarvis.vk_worker','--profile',PROFILE)
+            if self.headless:args.append('--headless')
+            self.process = JsonProcessClient(args, timeout=50, cwd=ROOT)
         try:
             return self.process.call(method, params)['result']
         except KernelError as exc:

@@ -3,6 +3,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all,collect_submodules,copy_metadata
 root=Path(SPECPATH).parent
 datas=[(str(root/'scripts/windows_speech.ps1'),'scripts'),
+       (str(root/'jarvis/local_voice_worker.py'),'jarvis'),
        (str(root/'models/vosk-model-small-ru-0.22'),'models/vosk-model-small-ru-0.22')]
 binaries=[(str(root/'build/bin/Release/jarvis-core.exe'),'build/bin/Release'),
           (str(root/'build/bin/Release/jarvis_core.dll'),'build/bin/Release')]

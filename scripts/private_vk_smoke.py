@@ -10,6 +10,7 @@ from jarvis.ipc import KernelClient
 from jarvis.setup import ensure_native_config
 from jarvis.services import LocalServices
 from jarvis.tools import ToolRegistry
+from jarvis.vk_browser import VKBrowser
 
 def main():
     settings=Settings.load()
@@ -19,9 +20,10 @@ def main():
     trap=CloudTrap();canary='Jarvis: проверка приватного пути. '+uuid.uuid4().hex[:8]
     with KernelClient(settings.executable,ensure_native_config(settings)) as kernel:
         registry=ToolRegistry(kernel,LocalServices(settings,kernel))
+        registry.vk=VKBrowser(headless=True)
         try:
             assistant=Assistant(registry,trap)
-            turn=assistant.respond('Напиши Избранное в ВК: '+canary)
+            turn=assistant.respond('Напиши в ВК Избранное сообщение '+canary)
             outputs=[t['output'] for t in turn.tools]
             report={'self_note_sent':any(o.get('ok') and o['result'].get('status')=='sent' for o in outputs),
                     'cloud_model_calls':trap.calls,'private_turn':turn.sensitive,

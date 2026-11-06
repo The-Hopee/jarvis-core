@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import os
 import math
+import json
 from pathlib import Path
 import re
 import sys
@@ -48,6 +49,11 @@ class Settings:
     coding_budget: float = 1.0
     privacy_mode: str = 'strict'
     allow_cloud_asr: bool = False
+    local_ai_enabled: bool = False
+    local_voice_enabled: bool = False
+    local_ai_idle_seconds: int = 90
+    private_voice_reference: str = ''
+    private_voice_reference_text: str = ''
     agent_workers: int = 0
     agent_memory_mb: int = 1024
     max_plan_tasks: int = 64
@@ -92,10 +98,18 @@ class Settings:
     @classmethod
     def load(cls, root: Path = ROOT):
         values = {**read_env(USER_DIR / "settings.env"), **read_env(root / ".env"), **os.environ}
+        local_config={}
+        try:local_config=json.loads((USER_DIR/'local-ai.json').read_text(encoding='utf-8'))
+        except (OSError,ValueError):pass
         latitude = values.get("JARVIS_LATITUDE", "").strip()
         profile_values={
             'privacy_mode':values.get('JARVIS_PRIVACY_MODE','strict').strip(),
             'allow_cloud_asr':values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip()=='1',
+            'local_ai_enabled':values.get('JARVIS_LOCAL_AI','1' if local_config.get('enabled') else '0')=='1',
+            'local_voice_enabled':values.get('JARVIS_LOCAL_VOICE','1' if local_config.get('voice_enabled') else '0')=='1',
+            'local_ai_idle_seconds':int(values.get('JARVIS_LOCAL_IDLE_SECONDS',local_config.get('idle_seconds',90))),
+            'private_voice_reference':str(local_config.get('voice_reference','')),
+            'private_voice_reference_text':str(local_config.get('voice_reference_text','')),
             'document_model':values.get('JARVIS_DOCUMENT_MODEL','openai/gpt-6.1-terra').strip(),
             'coding_model':values.get('JARVIS_CODING_MODEL','openai/gpt-6-sol').strip(),
             'document_effort':values.get('JARVIS_DOCUMENT_EFFORT','low').strip(),
@@ -103,6 +117,7 @@ class Settings:
         }
         if profile_values['privacy_mode'] not in {'strict','offline_ai'} or values.get('JARVIS_ALLOW_CLOUD_ASR','0').strip() not in {'0','1'}:
             raise ValueError('JARVIS_PRIVACY_MODE: strict/offline_ai; JARVIS_ALLOW_CLOUD_ASR: 0/1')
+        if not 5<=profile_values['local_ai_idle_seconds']<=600:raise ValueError('JARVIS_LOCAL_IDLE_SECONDS: от 5 до 600 секунд')
         for name,default,low,high in [('agent_workers',0,0,32),('agent_memory_mb',1024,256,16384),('max_plan_tasks',64,2,512)]:
             value=int(values.get('JARVIS_'+name.upper(),str(default)))
             if not low<=value<=high:raise ValueError('Параметр пула агентов вне допустимого диапазона: '+name)

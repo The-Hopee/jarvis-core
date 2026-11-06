@@ -65,6 +65,9 @@ class Conversation:
             return "open_youtube_result", {"index": number}, False
         dialog = self.context.get("dialog")
         if dialog:
+            if self.context.get('private_draft') and re.fullmatch(r'отправь(?:\s+(?:черновик|его|сообщение))?',text,re.I):
+                draft=self.context.pop('private_draft')
+                return 'send_message',draft,True
             message = re.fullmatch(r"(?:напиши|отправь)(?:\s+(?:ему|ей|им|туда)\s*[:,—-]?\s+|\s*[:,—-]\s*)(.+)", text, re.I | re.S)
             if message:
                 return "send_message", {**dialog, "text": message[1].strip().strip('«»"')}, True
@@ -82,6 +85,10 @@ class Conversation:
             return
         result = output["result"]
         self.updated_at = time.monotonic()
+        if name=='draft_reply' and result.get('text') and result.get('recipient'):
+            self.context['private_draft']={'platform':arguments['platform'],
+                'recipient':str(result['recipient']['id']),'text':result['text']}
+        elif name=='send_message':self.context.pop('private_draft',None)
         if result.get("status") == "ambiguous" and result.get("candidates") and arguments:
             self.pending = {"name": name, "arguments": dict(arguments), "candidates": result["candidates"][:8],
                             "can_send": can_send, "at": self.updated_at}
@@ -90,6 +97,13 @@ class Conversation:
             self.context["dialog"] = {"platform": arguments["platform"], "recipient": str(result["recipient"]["id"])}
             self.context["recipient_name"] = result["recipient"].get("name", "")
             self.pending = None
+            draft=self.context.get('private_draft')
+            if draft and (draft['platform'],draft['recipient'])!=(arguments['platform'],str(result['recipient']['id'])):
+                self.context.pop('private_draft',None)
+        elif result.get('recipient_id') and arguments and arguments.get('platform'):
+            self.context['dialog']={'platform':arguments['platform'],'recipient':str(result['recipient_id'])}
+            self.context['recipient_name']=result.get('recipient_name',arguments.get('recipient',''))
+            self.pending=None
         if name in {"open_youtube_video", "open_youtube_result", "search_youtube"} or result.get("video_id"):
             self.pending = None
             self.context['last_media'] = 'youtube'

@@ -142,6 +142,8 @@ def main():
                     packages[package] = importlib.metadata.version(package)
                 print(json.dumps({"native": ready, "voice_running": is_running(), "openrouter_key_present": bool(settings.api_key),
                                   "privacy_mode":settings.privacy_mode,"chat_cloud_allowed":False,"allow_cloud_asr":settings.allow_cloud_asr,
+                                  "local_ai_enabled":settings.local_ai_enabled,"local_voice_enabled":settings.local_voice_enabled,
+                                  "local_ai_idle_seconds":settings.local_ai_idle_seconds,
                                   "model": settings.model, "tts": settings.tts, "voice": settings.voice,
                                   "voice_preset": settings.voice_preset,
                                   "local_speaker": settings.local_speaker,

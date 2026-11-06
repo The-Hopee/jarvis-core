@@ -15,15 +15,19 @@ class KernelError(RuntimeError):
 
 
 class JsonProcessClient:
-    def __init__(self, command: list[str], timeout: float = 15, cwd=None):
+    def __init__(self, command: list[str], timeout: float = 15, cwd=None, env=None,creationflags_extra=0):
         self.timeout = timeout
         self._lock = threading.Lock()
         self._queue = queue.Queue(maxsize=4)
         self._stderr = deque(maxlen=10)
         self._closed = False
+        self.terminate_tree=None
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), cwd=cwd)
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)|creationflags_extra, cwd=cwd,env=env)
+        # Native Windows libraries can write non-UTF-8 diagnostic bytes. A decode
+        # failure must not stop draining stderr and deadlock the child process.
+        self.process.stderr.reconfigure(errors='replace')
         self._reader = threading.Thread(target=self._read, daemon=True)
         self._errors = threading.Thread(target=self._read_errors, daemon=True)
         self._reader.start()
@@ -85,6 +89,7 @@ class JsonProcessClient:
         if self._closed:
             return
         self._closed = True
+        if self.terminate_tree:self.terminate_tree()
         try:
             self.process.stdin.close()
         except OSError:

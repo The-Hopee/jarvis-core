@@ -75,6 +75,9 @@ class ToolRegistry:
         self.home_jobs=None
         self.active_tools=None
         self.chat_model = OpenRouterClient(settings.api_key, settings.model, max_tokens=1200) if settings.api_key else None
+        from .local_ai import get_local_ai
+        from .style_profile import StyleStore
+        self.local_ai=get_local_ai(settings);self.style_store=StyleStore();self._generated_message=False
         from .documents import Documents
         self.documents = Documents(settings, kernel)
         text = {"type": "string", "minLength": 1, "maxLength": 200}
@@ -110,6 +113,7 @@ class ToolRegistry:
         self.register(Tool("send_message", "Отправить продиктованный пользователем текст выбранному человеку. Только по прямой просьбе написать/отправить; не перефразируй диктуемый текст.", schema({**target, "text": {"type": "string", "minLength": 1, "maxLength": 4000}}, ["platform", "recipient", "text"]), self.send_message))
         self.register(Tool("draft_reply", "Подготовить текст ответа по контексту и примерам исходящих сообщений владельца, без отправки.", schema({**target, "instruction": {"type": "string", "maxLength": 1500}}, ["platform", "recipient"]), self.draft_reply))
         self.register(Tool("reply_in_my_style", "По прямой просьбе пользователя прочитать выбранный диалог, составить ответ в его стиле и отправить. Не использовать для просьбы только показать черновик.", schema({**target, "instruction": {"type": "string", "maxLength": 1500}}, ["platform", "recipient"]), self.reply_in_my_style))
+        self.register(Tool('learn_style','По прямой просьбе владельца запомнить локально только его исходящие примеры в выбранном диалоге.',schema(target,['platform','recipient']),self.learn_style))
         path = {"type": "string", "minLength": 1, "maxLength": 4096}
         filename = {"type": "string", "maxLength": 150}
         mapping = {"type": "object", "maxProperties": 100, "propertyNames": {"minLength": 1, "maxLength": 500},
@@ -180,6 +184,7 @@ class ToolRegistry:
 
     def close(self):
         if self._owns_vk:self.vk.close()
+        if self._owns_vk and self.local_ai:self.local_ai.close()
 
     def coding_status(self,job_id):
         from .coding import job_status
@@ -206,17 +211,31 @@ class ToolRegistry:
         self.check_cancelled()
         if not self.can_send:
             raise ServiceError('В текущем запросе нет разрешения на отправку. Для черновика используй draft_reply.')
-        return self._backend(platform).send(recipient, text, operation_id=self.request_id)
+        result=self._backend(platform).send(recipient, text, operation_id=self.request_id)
+        if result.get('status')=='sent' and result.get('recipient_id') and not self._generated_message:
+            try:self.style_store.record(platform,result['recipient_id'],text)
+            except (OSError,ValueError,KeyError,TypeError):result={**result,'style_saved':False}
+        return result
+
+    def learn_style(self,platform,recipient):
+        if not re.search(r'(?:запомни|изучи|обучи).*стил',self.user_request,re.I):
+            raise ServiceError('Обучение стилю не запрошено владельцем')
+        dialogue=self.read_dialog(platform,recipient,limit=100)
+        if not dialogue.get('recipient'):return dialogue
+        count=self.style_store.learn(platform,dialogue)
+        return {'status':'learned','examples':count,'recipient':dialogue['recipient']}
 
     def draft_reply(self, platform, recipient, instruction='Ответь по контексту в моём стиле'):
         from .messaging import draft_reply
-        if not getattr(self.chat_model,'is_local',False):
+        client=self.local_ai.text if self.local_ai else self.chat_model
+        if not getattr(client,'is_local',False):
             from .privacy import require_chat_cloud
             require_chat_cloud()
         dialogue = self.read_dialog(platform, recipient, limit=30)
         if not dialogue.get('recipient'):
             return dialogue
-        draft = draft_reply(self.chat_model, dialogue, instruction)
+        profile=self.style_store.context(platform,dialogue['recipient']['id'])
+        draft = draft_reply(client, dialogue, instruction,profile=profile)
         return {**draft, 'recipient': dialogue['recipient'], 'status': 'draft', 'sent': False}
 
     def reply_in_my_style(self, platform, recipient, instruction='Ответь по контексту в моём стиле'):
@@ -227,7 +246,9 @@ class ToolRegistry:
             return draft
         username = draft['recipient'].get('username')
         target = ('@' + username if username else draft['recipient']['id']) if platform == 'telegram' else draft['recipient']['name']
-        result = self.send_message(platform, target, draft['text'])
+        self._generated_message=True
+        try:result = self.send_message(platform, target, draft['text'])
+        finally:self._generated_message=False
         return {**result, 'style_examples_used': draft['style_examples_used']}
 
     def register(self, tool):
@@ -266,7 +287,7 @@ class ToolRegistry:
 
     @staticmethod
     def resource_key(name,arguments):
-        if name in {'open_dialog','read_dialog','send_message','draft_reply','reply_in_my_style'}:
+        if name in {'open_dialog','read_dialog','send_message','draft_reply','reply_in_my_style','learn_style'}:
             return 'vk_profile' if isinstance(arguments,dict) and arguments.get('platform')=='vk' else 'telegram_session'
         if name in {'search_vk_music','play_vk_music','play_vk_music_result','control_vk_music'}:return 'vk_profile'
         if name in {'list_documents','read_document','create_document','fill_document','open_document'}:return 'documents'

@@ -93,6 +93,8 @@ def play_mp3(path, *, max_seconds=None, on_start=None):
 class Speaker:
     def __init__(self, settings, muted=False):
         self.settings, self.muted = settings, muted
+        from .local_ai import get_local_ai
+        self.local_ai=get_local_ai(settings)
         self.edge_healthy = True
         self.local_voice = None
         self.cloud_retry_at = 0
@@ -176,9 +178,25 @@ class Speaker:
         if private:
             # Explicit local branch: no cloud, Edge websocket or model fallback.
             try:
+                if self.settings.local_voice_enabled:
+                    from .local_voice_cache import cached_reply
+                    cached=cached_reply(self.settings,text)
+                    if cached is not None and cached.is_file():
+                        import wave
+                        with wave.open(str(cached)) as sample:
+                            valid=sample.getframerate()>0 and .1<sample.getnframes()/sample.getframerate()<15
+                        if valid:
+                            mark('tts_ready');self._play_file(cached,before_playback=before_playback);return
                 with tempfile.TemporaryDirectory(prefix='jarvis-private-voice-') as directory:
                     path=Path(directory)/'speech.wav'
-                    with measure('tts','windows_private'):windows_speak(text,path)
+                    if self.local_ai and self.settings.local_voice_enabled:
+                        try:
+                            with measure('tts','qwen_local'):self.local_ai.voice.synthesize(text,path,self.settings)
+                        except (RuntimeError,OSError):
+                            path.unlink(missing_ok=True)
+                            with measure('tts','windows_private'):windows_speak(text,path)
+                    else:
+                        with measure('tts','windows_private'):windows_speak(text,path)
                     self._play_file(path,before_playback=before_playback)
             except (RuntimeError,OSError,subprocess.TimeoutExpired):
                 print('[Приватность] Локальная озвучка недоступна. Текст остаётся на ПК.',file=sys.stderr)

@@ -403,3 +403,31 @@ bypasses the language model while preserving private mode. Existing cancellation
 playback locking, missing-cache and privacy tests remain successful. All four
 owner status clips are cached. No test audio was played and no private account
 message was sent for this change. The published RC1 archive is unchanged.
+
+## Local private models — 2026-11-06
+
+179 Python tests pass (46.974 seconds). Real Qwen3.5-4B tests cover voice-style
+message order, no punctuation, clarification, local drafts and selected outgoing
+style examples on synthetic accounts: zero cloud calls. A real own VK Saved
+Messages note through the new no-punctuation path passed without cloud calls or
+note content in subsequent cloud history. Telegram remains deferred.
+
+Real Qwen3-TTS 0.6B rendered short Russian previews fully offline. The initial
+archive-conditioned tone was rejected; conditioning on the previously accepted
+A preview was accepted by the owner after local playback. Cold render ~16 s,
+warm ~7 s; eight fixed acknowledgements are cached. Private dynamic speech never
+falls back to cloud audio. Both models used ~7255 MiB VRAM including the desktop;
+after idle both processes exited and usage returned to ~1456 MiB. Model sockets
+were loopback-only and the post-import voice network probe was blocked.
+
+Regression tests cover literal data, negation, stale drafts, one-use send grants,
+profile isolation, confirmed sends despite style-storage failure, worker secret
+stripping, Windows short-path behavior, stderr decoding, idle termination and
+parent-death cleanup with an owned Windows Job Object. Early FP16 CUDA errors
+were corrected by BF16, following the model's supported inference precision;
+subsequent checks had no new NVIDIA events. No driver update or report upload
+was performed. See docs/LOCAL_AI.md and the aggregate JSON in docs/benchmarks.
+
+Scope: source installation on the owner's PC. The immutable RC1 ZIP is unchanged;
+ordinary recipients, microphone accuracy, personal style quality, Telegram and
+another person's installation retain manual acceptance gates.

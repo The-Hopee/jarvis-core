@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from .config import USER_DIR
 from .http import ServiceError
 
-PRIVATE_TOOLS={'open_dialog','read_dialog','send_message','draft_reply','reply_in_my_style'}
+PRIVATE_TOOLS={'open_dialog','read_dialog','send_message','draft_reply','reply_in_my_style','learn_style'}
 HOSTS={'openrouter.ai','api.elevenlabs.io','ipapi.co','geocoding-api.open-meteo.com',
        'api.open-meteo.com','maps.mail.ru','overpass.private.coffee','www.youtube.com'}
 _secrets=set();_lock=threading.RLock();_opener_installed=False
@@ -69,7 +69,9 @@ def chat_action(text):
     if first:
         # Only the direct object of the first verb can classify a technical task;
         # keywords inside dictated message text must never grant a cloud route.
-        return not bool(re.match(r'\s+(?:код\b|модул|программ|функци|тест|документ|отч[её]т|стать|резюме|договор|сказк)',text[first.end():],re.I))
+        return not bool(re.match(r'\s+(?:код|модул[ьяюеи]|программ[ауые]|функци[юяи]|'
+                                r'тест(?:ы|ов)?|документ(?:ы|а)?|отч[её]т(?:ы|а)?|'
+                                r'стать[юяи]|резюме|договор(?:ы|а)?|сказк[ауи])\b',text[first.end():],re.I))
     return bool(re.search(r'сообщени',text,re.I))
 
 def clean_text(text):
@@ -87,7 +89,7 @@ def clean(value):
 
 def cloud_context(value):
     # The real local context still resolves pronouns and recipient choices.
-    return clean({k:v for k,v in value.items() if k not in {'dialog','recipient_name'}})
+    return clean({k:v for k,v in value.items() if k not in {'dialog','recipient_name','private_draft'}})
 
 def cloud_tool(name,output):
     if not output.get('ok'):

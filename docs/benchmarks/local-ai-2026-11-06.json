@@ -1,0 +1,156 @@
+{
+  "llm": {
+    "cases": [
+      {
+        "id": "word_order",
+        "passed": true,
+        "seconds": 0.005,
+        "confirmation": false,
+        "private": true,
+        "cloud_calls": 0
+      },
+      {
+        "id": "no_punctuation",
+        "passed": true,
+        "seconds": 2.994,
+        "confirmation": true,
+        "private": true,
+        "cloud_calls": 0
+      },
+      {
+        "id": "open",
+        "passed": true,
+        "seconds": 0.0,
+        "confirmation": false,
+        "private": true,
+        "cloud_calls": 0
+      },
+      {
+        "id": "draft_style",
+        "passed": true,
+        "seconds": 1.207,
+        "confirmation": false,
+        "private": true,
+        "cloud_calls": 0
+      },
+      {
+        "id": "literal_negation",
+        "passed": true,
+        "seconds": 0.0,
+        "confirmation": false,
+        "private": true,
+        "cloud_calls": 0
+      },
+      {
+        "id": "missing_platform",
+        "passed": true
+      },
+      {
+        "id": "style_saved_locally",
+        "passed": true
+      }
+    ],
+    "cloud_calls": 0,
+    "before_exit": {
+      "text": {
+        "running": true
+      },
+      "voice": {
+        "running": false
+      }
+    },
+    "after_exit": {
+      "text": {
+        "running": false
+      },
+      "voice": {
+        "running": false
+      }
+    },
+    "history_cleared": true,
+    "passed": true
+  },
+  "voice": {
+    "previews": [
+      {
+        "file": "local-qwen-a-target-a.wav",
+        "seconds_to_render": 15.976,
+        "audio_seconds": 1.76,
+        "sample_rate": 24000,
+        "bytes": 84524
+      },
+      {
+        "file": "local-qwen-message-target-a.wav",
+        "seconds_to_render": 6.888,
+        "audio_seconds": 2.16,
+        "sample_rate": 24000,
+        "bytes": 103724
+      }
+    ],
+    "before_exit": {
+      "text": {
+        "running": false
+      },
+      "voice": {
+        "running": true
+      }
+    },
+    "after_exit": {
+      "text": {
+        "running": false
+      },
+      "voice": {
+        "running": false
+      }
+    },
+    "playback": false,
+    "passed": true
+  },
+  "lifecycle": {
+    "before_idle": {
+      "text": {
+        "running": true
+      },
+      "voice": {
+        "running": true
+      }
+    },
+    "after_idle": {
+      "text": {
+        "running": false
+      },
+      "voice": {
+        "running": false
+      }
+    },
+    "gpu_MiB": {
+      "baseline": 1513,
+      "loaded": 7255,
+      "after_idle": 1456
+    },
+    "only_loopback_connections": true,
+    "voice_network_blocked": true,
+    "passed": true
+  },
+  "live_vk": {
+    "self_note_sent": true,
+    "cloud_model_calls": 0,
+    "private_turn": true,
+    "history_contains_note": false,
+    "dictation_mode": "vosk"
+  },
+  "installation": {
+    "revisions": {
+      "unsloth/Qwen3.5-4B-GGUF": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "Qwen/Qwen3-TTS-12Hz-0.6B-Base": "5d83992436eae1d760afd27aff78a71d676296fc"
+    },
+    "llama": "b12110",
+    "verified_files": 14,
+    "weights_and_archives_bytes": 5935497064
+  },
+  "acceptance": {
+    "python_tests": 179,
+    "voice_accepted_by_owner": true,
+    "cached_fixed_replies": 8
+  }
+}

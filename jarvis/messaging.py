@@ -77,12 +77,12 @@ class MessageLedger:
             db.execute('UPDATE sends SET result=? WHERE operation=?', (json.dumps(value, ensure_ascii=False), key))
 
 
-def draft_reply(client, dialogue, instruction='Ответь по контексту в моём стиле'):
+def draft_reply(client, dialogue, instruction='Ответь по контексту в моём стиле',*,profile=None):
     if not getattr(client,'is_local',False):
         from .privacy import require_chat_cloud
         require_chat_cloud()
     if client is None:
-        raise ServiceError('Для ответа по контексту нужен рабочий ключ OpenRouter')
+        raise ServiceError('Для ответа по контексту нужна локальная модель')
     messages = dialogue.get('messages', [])
     examples = [message['text'] for message in messages if message.get('outgoing') and message.get('text')][-10:]
     if not messages:
@@ -95,9 +95,17 @@ def draft_reply(client, dialogue, instruction='Ответь по контекс�
               'Если для ответа нужны неизвестные сведения, задай собеседнику короткий уточняющий вопрос.')
     payload = {'instruction': instruction, 'recipient': dialogue['recipient']['name'],
                'history': messages[-30:], 'style_examples': examples}
+    if profile:payload['saved_style']=profile
+    # Bound context before local inference; neither contact history nor its
+    # writing profile is ever routed through a cloud client.
+    if profile:payload['saved_style']={**profile,'examples':profile.get('examples',[])[-8:]}
+    payload['history']=[{k:(v[:700] if k=='text' and isinstance(v,str) else v) for k,v in m.items()
+                         if k in {'text','outgoing'}} for m in messages[-12:]]
     response = client.complete([{'role': 'system', 'content': prompt},
                                 {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}], [], allow_tools=False)
     text = response.get('content')
     if not isinstance(text, str) or not text.strip() or len(text) > 4000:
         raise ServiceError('Модель не подготовила допустимый текст ответа')
+    from .privacy import clean_text
+    if clean_text(text)!=text:raise ServiceError('Сгенерированный ответ содержит секретные данные и не будет отправлен')
     return {'text': text.strip(), 'style_examples_used': len(examples)}
